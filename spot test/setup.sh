@@ -39,12 +39,19 @@ sudo bash -c 'cat > /etc/systemd/system/http-server.service <<EOF
 [Unit]
 Description=HTTP Server for Frontend
 After=network.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
 
 [Service]
-ExecStart=/usr/bin/http-server /home/test -p 5500
+Type=simple
+ExecStart=/usr/local/bin/http-server /home/test -p 5500 --cors
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=/home/test
-Restart=always
+Restart=on-failure
+RestartSec=5s
 User=test
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
