@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Spotify Web Playback SDK Quick Start</title>
+</head>
+<body>
+    <h1>Spotify Web Playback SDK Quick Start</h1>
+    <button id="togglePlay">Toggle Play</button>
+    <button id="pauseAll">Pause All</button>
+    <button id="radio1">Radio 1</button>
+    <button id="radio4">Radio 4</button>
+    <button id="loginSpotify">Login met Spotify</button>
+
+    <!-- Voeg een sectie toe voor WiFi-configuratie -->
+    <div id="wifiConfig" style="display: none;">
+        <h2>WiFi Configuratie</h2>
+        <button id="scanNetworks">Scan Netwerken</button>
+        <ul id="networkList"></ul>
+        <form id="wifiForm" style="display: none;">
+            <label for="ssid">SSID:</label>
+            <input type="text" id="ssid" name="ssid" required>
+            <label for="password">Wachtwoord:</label>
+            <input type="password" id="password" name="password">
+            <button type="submit">Verbinden</button>
+        </form>
+    </div>
+
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    <script>
+        let player;
+        let accessToken = '';
+        const serverUrl = 'http://localhost:3001'; // Server URL
+
+        document.getElementById("loginSpotify").onclick = function() {
+            window.location.href = `${serverUrl}/login`; // Start Spotify login flow
+        };
+
+        async function fetchAccessToken() {
+            try {
+                const response = await fetch(`${serverUrl}/refresh-token`, { 
+                    method: "POST", 
+                    credentials: "include" 
+                });
+                const data = await response.json();
+                accessToken = data.access_token;
+                console.log("Token vernieuwd!");
+                return accessToken;
+            } catch (error) {
+                console.error("Fout bij ophalen van token:", error);
+                return null;
+            }
+        }
+
+        function startTokenRefreshLoop() {
+            setInterval(async () => {
+                console.log("Vernieuwen van token...");
+                await fetchAccessToken();
+            }, 55 * 60 * 1000); // Elke 55 minuten
+        }
+
+        window.onSpotifyWebPlaybackSDKReady = async () => {
+            accessToken = await fetchAccessToken();
+            startTokenRefreshLoop();
+
+            player = new Spotify.Player({
+                name: 'test',
+                getOAuthToken: async cb => {
+                    if (!accessToken) {
+                        accessToken = await fetchAccessToken();
+                    }
+                    cb(accessToken);
+                },
+                volume: 0.5
+            });
+
+            player.addListener('ready', ({ device_id }) => {
+                console.log('Ready with Device ID', device_id);
+            });
+
+            player.addListener('authentication_error', async ({ message }) => {
+                console.error("Authenticatiefout:", message);
+                accessToken = await fetchAccessToken();
+            });
+
+            document.getElementById('togglePlay').onclick = function () {
+                player.togglePlay();
+            };
+
+            player.connect();
+        };
+
+        document.getElementById('radio1').onclick = function () {
+            playRadio("https://www.nederland.fm/radio/radio1");
+        };
+
+        document.getElementById('radio4').onclick = function () {
+            playRadio("https://www.nederland.fm/radio/radio4");
+        };
+
+        document.getElementById('pauseAll').onclick = function () {
+            pauseAll();
+        };
+
+        function playRadio(url) {
+            const existingFrame = document.getElementById('radioFrame');
+            if (existingFrame) existingFrame.remove();
+
+            const iframe = document.createElement('iframe');
+            iframe.id = 'radioFrame';
+            iframe.src = url;
+            iframe.style.display = 'none';
+            iframe.allow = 'autoplay';
+            document.body.appendChild(iframe);
+        }
+
+        function pauseAll() {
+            if (player) {
+                player.pause().catch(error => console.error('Error pausing Spotify:', error));
+            }
+            const existingFrame = document.getElementById('radioFrame');
+            if (existingFrame) existingFrame.remove();
+        }
+
+        async function scanNetworks() {
+            try {
+                const response = await fetch('http://localhost:3001/networks');
+                const networks = await response.json();
+                const networkList = document.getElementById('networkList');
+                networkList.innerHTML = '';
+                networks.forEach(network => {
+                    const li = document.createElement('li');
+                    li.textContent = network.ssid;
+                    li.onclick = () => selectNetwork(network.ssid);
+                    networkList.appendChild(li);
+                });
+            } catch (error) {
+                console.error('Fout bij scannen van netwerken:', error);
+            }
+        }
+
+        function selectNetwork(ssid) {
+            document.getElementById('ssid').value = ssid;
+            document.getElementById('wifiForm').style.display = 'block';
+        }
+
+        document.getElementById('scanNetworks').onclick = scanNetworks;
+
+        document.getElementById('wifiForm').onsubmit = async function (event) {
+            event.preventDefault();
+            const ssid = document.getElementById('ssid').value;
+            const password = document.getElementById('password').value;
+            try {
+                const response = await fetch('http://localhost:3001/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ssid, password })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Verbonden met WiFi-netwerk!');
+                } else {
+                    alert('Fout bij verbinden: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Fout bij verbinden met netwerk:', error);
+            }
+        };
+
+        // Toon WiFi-configuratie als er geen verbinding is
+        async function checkConnection() {
+            try {
+                const response = await fetch('http://localhost:3001/status');
+                const status = await response.json();
+                if (!status.connected) {
+                    document.getElementById('wifiConfig').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Fout bij controleren van verbinding:', error);
+            }
+        }
+
+        checkConnection();
+    </script>
+</body>
+</html>
