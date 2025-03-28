@@ -228,6 +228,6 @@ app.post('/radio/stop', (req, res) => {
 });
 
 // 🔹 5. Start de server
-app.listen(PORT, () => {
-    console.log(`Server draait op http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server draait op poort ${PORT}`);
 });
