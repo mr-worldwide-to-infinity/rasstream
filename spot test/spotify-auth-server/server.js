@@ -33,7 +33,7 @@ app.get('/login', (req, res) => {
     res.redirect(`${SPOTIFY_AUTH_URL}?${queryParams}`);
 });
 
-// 🔹 2. Spotify stuurt gebruiker terug met een 'code', wissel deze in voor een token
+// 🔹 2. Spotify callback route
 app.get('/callback', async (req, res) => {
     const code = req.query.code;
 
@@ -48,22 +48,20 @@ app.get('/callback', async (req, res) => {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
 
-        // Sla tokens op in cookies met expliciete opties
         res.cookie('access_token', response.data.access_token, {
             httpOnly: true,
-            secure: false, // set to true if using https
+            secure: false,
             sameSite: 'lax',
             maxAge: 3600000 // 1 hour
         });
         
         res.cookie('refresh_token', response.data.refresh_token, {
             httpOnly: true,
-            secure: false, // set to true if using https
+            secure: false,
             sameSite: 'lax',
             maxAge: 30 * 24 * 3600000 // 30 days
         });
 
-        console.log('Tokens opgeslagen in cookies');
         res.redirect(`${process.env.FRONTEND_URL}/test.html`);
     } catch (error) {
         console.error("Error getting token:", error.response?.data || error.message);
@@ -71,12 +69,11 @@ app.get('/callback', async (req, res) => {
     }
 });
 
-// 🔹 3. Endpoint om een nieuw access token te krijgen met het refresh token
+// 🔹 3. Token refresh route
 app.post('/refresh-token', async (req, res) => {
     const refresh_token = req.cookies.refresh_token;
     
     if (!refresh_token) {
-        console.log('Geen refresh token gevonden');
         return res.status(401).json({ error: 'No refresh token' });
     }
 
@@ -90,7 +87,6 @@ app.post('/refresh-token', async (req, res) => {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
 
-        // Update access token cookie
         res.cookie('access_token', response.data.access_token, {
             httpOnly: true,
             secure: false,
@@ -98,8 +94,7 @@ app.post('/refresh-token', async (req, res) => {
             maxAge: 3600000
         });
 
-        console.log('Access token vernieuwd');
-        res.json({ access_token: response.data.access_token });
+        res.json({ success: true });
     } catch (error) {
         console.error("Error refreshing token:", error.response?.data || error.message);
         res.status(500).json({ error: 'Failed to refresh token' });
@@ -193,11 +188,10 @@ app.get('/status', (req, res) => {
     });
 });
 
-// Radio endpoints
+// 🔹 4. Radio control routes
 app.post('/radio/play', (req, res) => {
     const { station } = req.body;
     
-    // Stop eerst eventuele bestaande radio
     if (radioProcess) {
         radioProcess.kill();
         radioProcess = null;
@@ -215,19 +209,8 @@ app.post('/radio/play', (req, res) => {
             return res.status(400).json({ error: 'Invalid station' });
     }
 
-    console.log('Starting radio stream:', streamUrl);
-
-    // Start de nieuwe radio stream met ALSA output
     radioProcess = spawn('mpg123', ['-o', 'alsa', '--no-control', streamUrl]);
     
-    radioProcess.stdout.on('data', (data) => {
-        console.log('mpg123 output:', data.toString());
-    });
-
-    radioProcess.stderr.on('data', (data) => {
-        console.error('mpg123 error:', data.toString());
-    });
-
     radioProcess.on('error', (error) => {
         console.error('Error playing radio:', error);
         res.status(500).json({ error: 'Failed to play radio' });
@@ -244,7 +227,7 @@ app.post('/radio/stop', (req, res) => {
     res.json({ success: true });
 });
 
-// 🔹 4. Start de server
+// 🔹 5. Start de server
 app.listen(PORT, () => {
     console.log(`Server draait op http://localhost:${PORT}`);
 });

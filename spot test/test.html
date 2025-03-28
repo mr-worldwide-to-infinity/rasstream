@@ -5,7 +5,7 @@
 </head>
 <body>
     <h1>Spotify and Radio Control</h1>
-    <button id="pauseAll">Pause All</button>
+    <button id="pauseAll">Stop Radio</button>
     <button id="radio1">Radio 1</button>
     <button id="radio4">Radio 4</button>
     <button id="loginSpotify">Login met Spotify</button>
@@ -25,13 +25,13 @@
     </div>
 
     <script>
-        const serverUrl = 'http://10.1.70.172:3001'; // Vervang met je Raspberry Pi IP
+        const serverUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
 
         document.getElementById("loginSpotify").onclick = function() {
             window.location.href = `${serverUrl}/login`;
         };
 
-        document.getElementById('radio1').onclick = function () {
+        document.getElementById('radio1').onclick = function() {
             fetch(`${serverUrl}/radio/play`, {
                 method: 'POST',
                 headers: {
@@ -41,7 +41,7 @@
             });
         };
 
-        document.getElementById('radio4').onclick = function () {
+        document.getElementById('radio4').onclick = function() {
             fetch(`${serverUrl}/radio/play`, {
                 method: 'POST',
                 headers: {
@@ -51,7 +51,7 @@
             });
         };
 
-        document.getElementById('pauseAll').onclick = function () {
+        document.getElementById('pauseAll').onclick = function() {
             fetch(`${serverUrl}/radio/stop`, {
                 method: 'POST'
             });
