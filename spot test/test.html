@@ -29,24 +29,51 @@
     <script>
         let player;
         let accessToken = '';
-        const serverUrl = 'http://raspberrypi-2.local:3001'; // Server URL
+        const serverUrl = 'http://raspberrypi-2.local:3001';
 
         document.getElementById("loginSpotify").onclick = function() {
             window.location.href = `${serverUrl}/login`; // Start Spotify login flow
         };
 
+        // Voeg een functie toe om token status te checken
+        async function checkTokenStatus() {
+            try {
+                const response = await fetch(`${serverUrl}/check-token`, {
+                    credentials: 'include'
+                });
+                const status = await response.json();
+                console.log('Token status:', status);
+                
+                if (!status.hasAccessToken && !status.hasRefreshToken) {
+                    console.log('Geen tokens gevonden, redirect naar login');
+                    window.location.href = `${serverUrl}/login`;
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                console.error('Error checking token status:', error);
+                return false;
+            }
+        }
+
+        // Update de fetchAccessToken functie
         async function fetchAccessToken() {
             try {
                 const response = await fetch(`${serverUrl}/refresh-token`, { 
                     method: "POST", 
-                    credentials: "include" 
+                    credentials: "include"
                 });
+                if (!response.ok) {
+                    throw new Error('Token refresh failed');
+                }
                 const data = await response.json();
                 accessToken = data.access_token;
                 console.log("Token vernieuwd!");
                 return accessToken;
             } catch (error) {
                 console.error("Fout bij ophalen van token:", error);
+                // Als er een error is, probeer opnieuw in te loggen
+                window.location.href = `${serverUrl}/login`;
                 return null;
             }
         }
@@ -58,8 +85,18 @@
             }, 55 * 60 * 1000); // Elke 55 minuten
         }
 
+        // Update de onload handler
+        window.onload = async () => {
+            await checkTokenStatus();
+        };
+
+        // Update de Spotify Web Playback SDK initialisatie
         window.onSpotifyWebPlaybackSDKReady = async () => {
+            if (!await checkTokenStatus()) return;
+            
             accessToken = await fetchAccessToken();
+            if (!accessToken) return;
+            
             startTokenRefreshLoop();
 
             player = new Spotify.Player({
@@ -73,23 +110,46 @@
                 volume: 0.5
             });
 
-            player.addListener('ready', ({ device_id }) => {
-                console.log('Ready with Device ID', device_id);
-                fetch('https://api.spotify.com/v1/me/player', {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        device_ids: [device_id],
-                        play: false
-                    })
-                }).catch(console.error);
+            player.addListener('ready', async ({ device_id }) => {
+                console.log('Ready with Device ID:', device_id);
+                
+                try {
+                    const response = await fetch('https://api.spotify.com/v1/me/player', {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            device_ids: [device_id],
+                            play: false
+                        })
+                    });
+                    
+                    if (response.status === 204) {
+                        console.log('Device successfully activated!');
+                        
+                        await fetch('https://api.spotify.com/v1/me/player/transfer', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                device_ids: [device_id],
+                                play: false
+                            })
+                        });
+                    } else {
+                        console.error('Failed to activate device:', response.status);
+                    }
+                } catch (error) {
+                    console.error('Error activating device:', error);
+                }
             });
 
             player.addListener('not_ready', ({ device_id }) => {
-                console.log('Device ID is niet meer actief:', device_id);
+                console.log('Device ID has gone offline:', device_id);
             });
 
             player.addListener('initialization_error', ({ message }) => {
@@ -103,15 +163,26 @@
 
             player.addListener('account_error', ({ message }) => {
                 console.error('Failed to validate Spotify account:', message);
+                console.log('Note: Spotify Premium is required for Web Playback SDK');
             });
 
             document.getElementById('togglePlay').onclick = function () {
                 player.togglePlay();
             };
 
-            const connected = await player.connect();
-            if (connected) {
-                console.log('Successfully connected to Spotify!');
+            try {
+                const connected = await player.connect();
+                console.log('Player connection result:', connected);
+                
+                if (connected) {
+                    console.log('Successfully connected to Spotify!');
+                    await player.getCurrentState();
+                    console.log('Player state updated');
+                } else {
+                    console.error('Failed to connect to Spotify');
+                }
+            } catch (error) {
+                console.error('Error connecting to Spotify:', error);
             }
         };
 
@@ -206,6 +277,26 @@
         }
 
         checkConnection();
+
+        // Voeg een functie toe om de device status te controleren
+        async function checkDeviceStatus() {
+            try {
+                const response = await fetch('https://api.spotify.com/v1/me/player/devices', {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                const data = await response.json();
+                console.log('Available devices:', data.devices);
+            } catch (error) {
+                console.error('Error checking devices:', error);
+            }
+        }
+
+        // Voeg een knop toe aan de HTML om de device status te checken
+        document.body.insertAdjacentHTML('beforeend', `
+            <button onclick="checkDeviceStatus()">Check Devices</button>
+        `);
     </script>
 </body>
 </html>

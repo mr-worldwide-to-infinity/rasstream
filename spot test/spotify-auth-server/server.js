@@ -19,7 +19,7 @@ const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
 // 🔹 1. Route om gebruiker naar Spotify login te sturen
 app.get('/login', (req, res) => {
-    const scope = 'user-read-private user-read-email streaming user-modify-playback-state user-read-playback-state app-remote-control';
+    const scope = 'streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state app-remote-control';
     const queryParams = querystring.stringify({
         response_type: 'code',
         client_id: process.env.SPOTIFY_CLIENT_ID,
@@ -45,38 +45,72 @@ app.get('/callback', async (req, res) => {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
 
-        // Bewaar tokens in cookies
-        res.cookie('access_token', response.data.access_token, { httpOnly: true });
-        res.cookie('refresh_token', response.data.refresh_token, { httpOnly: true });
+        // Sla tokens op in cookies met expliciete opties
+        res.cookie('access_token', response.data.access_token, {
+            httpOnly: true,
+            secure: false, // set to true if using https
+            sameSite: 'lax',
+            maxAge: 3600000 // 1 hour
+        });
+        
+        res.cookie('refresh_token', response.data.refresh_token, {
+            httpOnly: true,
+            secure: false, // set to true if using https
+            sameSite: 'lax',
+            maxAge: 30 * 24 * 3600000 // 30 days
+        });
 
+        console.log('Tokens opgeslagen in cookies');
         res.redirect(`${process.env.FRONTEND_URL}/test.html`);
     } catch (error) {
-        console.error("Fout bij verkrijgen van token:", error);
-        res.status(500).send("Authenticatie mislukt");
+        console.error("Error getting token:", error.response?.data || error.message);
+        res.status(500).send("Authentication failed");
     }
 });
 
 // 🔹 3. Endpoint om een nieuw access token te krijgen met het refresh token
 app.post('/refresh-token', async (req, res) => {
-    const refreshToken = req.cookies.refresh_token;
-    if (!refreshToken) return res.status(403).json({ error: 'Geen refresh token' });
+    const refresh_token = req.cookies.refresh_token;
+    
+    if (!refresh_token) {
+        console.log('Geen refresh token gevonden');
+        return res.status(401).json({ error: 'No refresh token' });
+    }
 
     try {
         const response = await axios.post(SPOTIFY_TOKEN_URL, new URLSearchParams({
             grant_type: 'refresh_token',
-            refresh_token: refreshToken,
+            refresh_token: refresh_token,
             client_id: process.env.SPOTIFY_CLIENT_ID,
             client_secret: process.env.SPOTIFY_CLIENT_SECRET,
         }), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
 
-        res.cookie('access_token', response.data.access_token, { httpOnly: true });
+        // Update access token cookie
+        res.cookie('access_token', response.data.access_token, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax',
+            maxAge: 3600000
+        });
+
+        console.log('Access token vernieuwd');
         res.json({ access_token: response.data.access_token });
     } catch (error) {
-        console.error("Fout bij vernieuwen van token:", error);
-        res.status(500).json({ error: 'Kon token niet vernieuwen' });
+        console.error("Error refreshing token:", error.response?.data || error.message);
+        res.status(500).json({ error: 'Failed to refresh token' });
     }
+});
+
+// Voeg een route toe om token status te checken
+app.get('/check-token', (req, res) => {
+    const access_token = req.cookies.access_token;
+    const refresh_token = req.cookies.refresh_token;
+    res.json({
+        hasAccessToken: !!access_token,
+        hasRefreshToken: !!refresh_token
+    });
 });
 
 // 🔹 Endpoint om beschikbare WiFi-netwerken te scannen
