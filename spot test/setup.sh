@@ -14,24 +14,6 @@ echo "Installing project dependencies..."
 cd /home/test/spotify-auth-server
 npm install
 
-# Installeer Librespot (Spotify Connect client)
-echo "Installing Librespot..."
-curl -sL https://dtcooper.github.io/raspotify/install.sh | sh
-
-# Configureer Librespot
-echo "Configuring Librespot..."
-sudo bash -c 'cat > /etc/raspotify/conf <<EOF
-LIBRESPOT_NAME="Raspberry Pi Speaker"
-LIBRESPOT_BACKEND="alsa"
-LIBRESPOT_DEVICE="default:CARD=0"
-LIBRESPOT_INITIAL_VOLUME="100"
-EOF'
-
-# Start en enable Raspotify service
-echo "Starting Raspotify service..."
-sudo systemctl enable raspotify
-sudo systemctl restart raspotify
-
 # Maak een service voor de Spotify-auth-server
 echo "Creating Spotify Auth Server service..."
 sudo bash -c 'cat > /etc/systemd/system/spotify-auth-server.service <<EOF
@@ -80,3 +62,110 @@ sudo systemctl start http-server
 
 echo "Setup complete! The services are running."
 echo "Your Raspberry Pi should now appear as 'Raspberry Pi Speaker' in Spotify Connect"
+
+# Configureer vast IP-adres
+echo "Configuring static IP address..."
+sudo bash -c 'cat >> /etc/dhcpcd.conf <<EOF
+
+# Configuratie voor vast IP-adres
+interface wlan0
+static ip_address=192.168.4.1/24
+nohook wpa_supplicant
+EOF'
+
+# Installeer access point software
+echo "Installing access point software..."
+sudo apt install -y dnsmasq hostapd
+
+# Configureer hostapd
+sudo bash -c 'cat > /etc/hostapd/hostapd.conf <<EOF
+interface=wlan0
+driver=nl80211
+ssid=RaspberryPiAP
+hw_mode=g
+channel=7
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=raspberry
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+EOF'
+
+# Configureer dnsmasq
+sudo bash -c 'cat > /etc/dnsmasq.conf <<EOF
+interface=wlan0
+dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+EOF'
+
+# Enable hostapd
+sudo systemctl unmask hostapd
+sudo systemctl enable hostapd
+
+# Start services
+sudo systemctl restart dhcpcd
+sudo systemctl restart hostapd
+sudo systemctl restart dnsmasq
+
+# Maak een script voor het configureren van de access point interface
+sudo bash -c 'cat > /usr/local/bin/create-ap-interface.sh <<EOF
+#!/bin/bash
+iw phy phy0 interface add uap0 type __ap
+ip link set uap0 up
+EOF'
+sudo chmod +x /usr/local/bin/create-ap-interface.sh
+
+# Configureer vast IP-adres voor access point interface
+sudo bash -c 'cat >> /etc/dhcpcd.conf <<EOF
+
+# Configuratie voor access point interface
+interface uap0
+static ip_address=192.168.4.1/24
+nohook wpa_supplicant
+EOF'
+
+# Configureer hostapd voor de access point interface
+sudo bash -c 'cat > /etc/hostapd/hostapd.conf <<EOF
+interface=uap0
+driver=nl80211
+ssid=RaspberryPiAP
+hw_mode=g
+channel=7
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=raspberry
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+EOF'
+
+# Configureer dnsmasq voor DHCP op access point interface
+sudo bash -c 'cat > /etc/dnsmasq.conf <<EOF
+interface=uap0
+dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+EOF'
+
+# Maak een systemd service voor het aanmaken van de AP interface
+sudo bash -c 'cat > /etc/systemd/system/create-ap-interface.service <<EOF
+[Unit]
+Description=Create AP interface
+Before=hostapd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/create-ap-interface.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF'
+
+# Enable services
+sudo systemctl enable create-ap-interface
+sudo systemctl enable hostapd
