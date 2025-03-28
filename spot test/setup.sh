@@ -16,6 +16,48 @@ echo "Installing project dependencies..."
 cd /home/test/spotify-auth-server
 npm install
 
+# Configureer WiFi Access Point
+echo "Configuring WiFi Access Point..."
+# Deblokkeer WiFi
+sudo rfkill unblock all
+
+# Configureer dhcpcd
+sudo bash -c 'cat >> /etc/dhcpcd.conf <<EOF
+interface wlan0
+    static ip_address=192.168.4.1/24
+    nohook wpa_supplicant
+EOF'
+
+# Configureer dnsmasq
+sudo bash -c 'cat > /etc/dnsmasq.conf <<EOF
+interface=wlan0
+dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+bind-interfaces
+server=8.8.8.8
+EOF'
+
+# Configureer hostapd
+sudo bash -c 'cat > /etc/hostapd/hostapd.conf <<EOF
+interface=wlan0
+driver=nl80211
+ssid=RaspberryPiAP
+hw_mode=g
+channel=7
+wmm_enabled=1
+ieee80211n=1
+auth_algs=1
+wpa=2
+wpa_passphrase=raspberry
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+country_code=NL
+EOF'
+
+sudo bash -c 'cat > /etc/default/hostapd <<EOF
+DAEMON_CONF="/etc/hostapd/hostapd.conf"
+EOF'
+
 # Maak wifi-check service aan
 echo "Creating WiFi check service..."
 sudo bash -c 'cat > /etc/systemd/system/wifi-check.service <<EOF
@@ -75,12 +117,20 @@ EOF'
 echo "Setting up wifi-check script..."
 sudo chmod +x /home/test/wifi-check.sh
 
-# Start en activeer de services
-echo "Starting and enabling services..."
-sudo systemctl daemon-reload
+# Enable services
+echo "Enabling services..."
+sudo systemctl unmask hostapd
+sudo systemctl enable hostapd
+sudo systemctl enable dnsmasq
 sudo systemctl enable wifi-check.service
 sudo systemctl enable spotify-auth-server
 sudo systemctl enable http-server
+
+# Start services
+echo "Starting services..."
+sudo systemctl restart dhcpcd
+sudo systemctl start hostapd
+sudo systemctl start dnsmasq
 sudo systemctl start wifi-check.service
 sudo systemctl start spotify-auth-server
 sudo systemctl start http-server

@@ -140,41 +140,91 @@ app.post('/connect', (req, res) => {
 
     console.log('Attempting to connect to WiFi:', ssid);
 
-    // Maak een tijdelijk configuratie bestand
-    const config = `
-network={
-    ssid="${ssid}"
-    psk="${password}"
-    key_mgmt=WPA-PSK
-}`;
+    // Escape speciale karakters in het wachtwoord
+    const escapedPassword = password.replace(/['"\\]/g, '\\$&');
+    
+    // Genereer wpa_passphrase voor veilige configuratie
+    exec(`wpa_passphrase "${ssid}" "${escapedPassword}"`, (error, stdout, stderr) => {
+        if (error) {
+            console.error('Error generating wpa_passphrase:', error);
+            return res.status(500).json({ error: 'Error generating WiFi config' });
+        }
 
-    try {
-        // Schrijf direct naar wpa_supplicant met echo en sudo
-        exec(`echo '${config}' | sudo tee -a /etc/wpa_supplicant/wpa_supplicant.conf`, (error, stdout, stderr) => {
-            if (error) {
-                console.error('Error writing WiFi config:', error);
-                console.error('stderr:', stderr);
-                return res.status(500).json({ error: 'Error writing WiFi config' });
-            }
+        // Voeg de basis configuratie toe aan de wpa_passphrase output
+        const config = `
+country=NL
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
 
-            console.log('WiFi config written successfully');
+${stdout}`;
 
-            // Herstart de WiFi verbinding
-            exec('sudo wpa_cli -i wlan0 reconfigure', (error, stdout, stderr) => {
+        try {
+            // Stop eerst de AP mode
+            exec('sudo systemctl stop hostapd', async (error) => {
                 if (error) {
-                    console.error('Error reconfiguring WiFi:', error);
-                    console.error('stderr:', stderr);
-                    return res.status(500).json({ error: 'Error reconfiguring WiFi' });
+                    console.error('Error stopping hostapd:', error);
+                    return res.status(500).json({ error: 'Error stopping AP mode' });
                 }
 
-                console.log('WiFi reconfigured successfully');
-                res.json({ success: true });
+                // Schrijf de nieuwe configuratie
+                fs.writeFile('/tmp/wpa_supplicant.conf', config, async (error) => {
+                    if (error) {
+                        console.error('Error writing temp config:', error);
+                        return res.status(500).json({ error: 'Error writing WiFi config' });
+                    }
+
+                    // Kopieer het bestand naar de juiste locatie met sudo
+                    exec('sudo cp /tmp/wpa_supplicant.conf /etc/wpa_supplicant/wpa_supplicant.conf', async (error) => {
+                        if (error) {
+                            console.error('Error copying config:', error);
+                            return res.status(500).json({ error: 'Error setting WiFi config' });
+                        }
+
+                        // Reset de WiFi interface
+                        exec('sudo ip link set wlan0 down && sudo ip link set wlan0 up && sudo wpa_cli -i wlan0 reconfigure', async (error) => {
+                            if (error) {
+                                console.error('Error resetting interface:', error);
+                                return res.status(500).json({ error: 'Error resetting interface' });
+                            }
+
+                            // Wacht en check de verbinding
+                            setTimeout(async () => {
+                                exec('iwgetid -r', (error, stdout) => {
+                                    if (error || !stdout.trim() || stdout.trim() !== ssid) {
+                                        console.error('Failed to connect to WiFi');
+                                        // Log wpa_supplicant debug info
+                                        exec('sudo wpa_cli status', (error, stdout) => {
+                                            console.log('WPA status:', stdout);
+                                        });
+                                        // Start AP mode weer als verbinding mislukt
+                                        exec('sudo systemctl start hostapd');
+                                        return res.status(500).json({ error: 'Failed to connect to WiFi' });
+                                    }
+
+                                    // Check internet connectivity
+                                    exec('ping -c 1 8.8.8.8', (error) => {
+                                        if (error) {
+                                            console.error('No internet connectivity');
+                                            // Start AP mode weer als geen internet
+                                            exec('sudo systemctl start hostapd');
+                                            return res.status(500).json({ error: 'No internet connectivity' });
+                                        }
+
+                                        res.json({ success: true });
+                                    });
+                                });
+                            }, 15000); // Verhoog wachttijd naar 15 seconden
+                        });
+                    });
+                });
             });
-        });
-    } catch (error) {
-        console.error('Error in WiFi configuration:', error);
-        res.status(500).json({ error: 'Error in WiFi configuration' });
-    }
+        } catch (error) {
+            console.error('Error in WiFi configuration:', error);
+            // Start AP mode weer bij errors
+            exec('sudo systemctl start hostapd');
+            res.status(500).json({ error: 'Error in WiFi configuration' });
+        }
+    });
 });
 
 // 🔹 Endpoint om de verbindingsstatus te controleren
