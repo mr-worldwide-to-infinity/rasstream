@@ -19,7 +19,7 @@ const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
 // 🔹 1. Route om gebruiker naar Spotify login te sturen
 app.get('/login', (req, res) => {
-    const scope = 'user-read-private user-read-email streaming user-modify-playback-state';
+    const scope = 'user-read-private user-read-email streaming user-modify-playback-state user-read-playback-state app-remote-control';
     const queryParams = querystring.stringify({
         response_type: 'code',
         client_id: process.env.SPOTIFY_CLIENT_ID,
@@ -49,7 +49,7 @@ app.get('/callback', async (req, res) => {
         res.cookie('access_token', response.data.access_token, { httpOnly: true });
         res.cookie('refresh_token', response.data.refresh_token, { httpOnly: true });
 
-        res.redirect(`${process.env.FRONTEND_URL}/loggedin.html`); // Stuur gebruiker naar frontend
+        res.redirect(`${process.env.FRONTEND_URL}/test.html`);
     } catch (error) {
         console.error("Fout bij verkrijgen van token:", error);
         res.status(500).send("Authenticatie mislukt");
