@@ -127,6 +127,14 @@ sudo apt install -y alsa-utils mpg123
 echo "Testing audio setup..."
 aplay -l
 
+# Configureer sudo rechten voor WiFi configuratie
+echo "Configuring sudo permissions for WiFi..."
+sudo bash -c 'cat > /etc/sudoers.d/wifi-permissions <<EOF
+test ALL=(ALL) NOPASSWD: /bin/bash -c cat /tmp/wifi_network.conf >> /etc/wpa_supplicant/wpa_supplicant.conf
+test ALL=(ALL) NOPASSWD: /sbin/wpa_cli -i wlan0 reconfigure
+EOF'
+sudo chmod 440 /etc/sudoers.d/wifi-permissions
+
 echo "Setup complete! The services are running."
 echo "Your Raspberry Pi should now appear as 'Raspberry Pi Speaker' in Spotify Connect"
 echo "Check the status of Raspotify with: sudo systemctl status raspotify"
