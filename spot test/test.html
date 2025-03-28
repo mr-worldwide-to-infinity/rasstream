@@ -1,17 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Spotify Web Playback SDK Quick Start</title>
+    <title>Spotify and Radio Control</title>
 </head>
 <body>
-    <h1>Spotify Web Playback SDK Quick Start</h1>
-    <button id="togglePlay">Toggle Play</button>
+    <h1>Spotify and Radio Control</h1>
     <button id="pauseAll">Pause All</button>
     <button id="radio1">Radio 1</button>
     <button id="radio4">Radio 4</button>
     <button id="loginSpotify">Login met Spotify</button>
 
-    <!-- Voeg een sectie toe voor WiFi-configuratie -->
+    <!-- WiFi configuratie sectie -->
     <div id="wifiConfig" style="display: none;">
         <h2>WiFi Configuratie</h2>
         <button id="scanNetworks">Scan Netwerken</button>
@@ -25,163 +24,11 @@
         </form>
     </div>
 
-    <script src="https://sdk.scdn.co/spotify-player.js"></script>
     <script>
-        let player;
-        let accessToken = '';
-        const serverUrl = 'http://raspberrypi-2.local:3001';
+        const serverUrl = 'http://10.1.70.172:3001'; // Vervang met je Raspberry Pi IP
 
         document.getElementById("loginSpotify").onclick = function() {
-            window.location.href = `${serverUrl}/login`; // Start Spotify login flow
-        };
-
-        // Voeg een functie toe om token status te checken
-        async function checkTokenStatus() {
-            try {
-                const response = await fetch(`${serverUrl}/check-token`, {
-                    credentials: 'include'
-                });
-                const status = await response.json();
-                console.log('Token status:', status);
-                
-                if (!status.hasAccessToken && !status.hasRefreshToken) {
-                    console.log('Geen tokens gevonden, redirect naar login');
-                    window.location.href = `${serverUrl}/login`;
-                    return false;
-                }
-                return true;
-            } catch (error) {
-                console.error('Error checking token status:', error);
-                return false;
-            }
-        }
-
-        // Update de fetchAccessToken functie
-        async function fetchAccessToken() {
-            try {
-                const response = await fetch(`${serverUrl}/refresh-token`, { 
-                    method: "POST", 
-                    credentials: "include"
-                });
-                if (!response.ok) {
-                    throw new Error('Token refresh failed');
-                }
-                const data = await response.json();
-                accessToken = data.access_token;
-                console.log("Token vernieuwd!");
-                return accessToken;
-            } catch (error) {
-                console.error("Fout bij ophalen van token:", error);
-                // Als er een error is, probeer opnieuw in te loggen
-                window.location.href = `${serverUrl}/login`;
-                return null;
-            }
-        }
-
-        function startTokenRefreshLoop() {
-            setInterval(async () => {
-                console.log("Vernieuwen van token...");
-                await fetchAccessToken();
-            }, 55 * 60 * 1000); // Elke 55 minuten
-        }
-
-        // Update de onload handler
-        window.onload = async () => {
-            await checkTokenStatus();
-        };
-
-        // Update de Spotify Web Playback SDK initialisatie
-        window.onSpotifyWebPlaybackSDKReady = async () => {
-            accessToken = await fetchAccessToken();
-            if (!accessToken) {
-                console.error('No access token available');
-                return;
-            }
-            
-            startTokenRefreshLoop();
-
-            player = new Spotify.Player({
-                name: 'Raspberry Pi Speaker', // Duidelijkere naam
-                getOAuthToken: async cb => {
-                    if (!accessToken) {
-                        accessToken = await fetchAccessToken();
-                    }
-                    cb(accessToken);
-                },
-                volume: 0.5
-            });
-
-            // Verbeterde logging en error handling
-            player.addListener('ready', async ({ device_id }) => {
-                console.log('Device ID:', device_id);
-                
-                try {
-                    // Activeer het apparaat direct
-                    const response = await fetch('https://api.spotify.com/v1/me/player', {
-                        method: 'PUT',
-                        headers: {
-                            'Authorization': `Bearer ${accessToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            device_ids: [device_id],
-                            play: false
-                        })
-                    });
-                    
-                    if (response.status === 204 || response.status === 200) {
-                        console.log('Device successfully activated!');
-                        // Voeg een visuele indicator toe
-                        document.body.insertAdjacentHTML('afterbegin', 
-                            `<div style="background: green; color: white; padding: 10px;">
-                                Device Active! ID: ${device_id}
-                            </div>`
-                        );
-                    } else {
-                        console.error('Failed to activate device:', response.status);
-                    }
-                } catch (error) {
-                    console.error('Error activating device:', error);
-                }
-            });
-
-            player.addListener('not_ready', ({ device_id }) => {
-                console.log('Device ID is offline:', device_id);
-                document.body.insertAdjacentHTML('afterbegin', 
-                    `<div style="background: red; color: white; padding: 10px;">
-                        Device Offline! ID: ${device_id}
-                    </div>`
-                );
-            });
-
-            player.addListener('initialization_error', ({ message }) => {
-                console.error('Failed to initialize:', message);
-                alert('Failed to initialize player: ' + message);
-            });
-
-            player.addListener('authentication_error', async ({ message }) => {
-                console.error('Failed to authenticate:', message);
-                alert('Authentication error: ' + message);
-                accessToken = await fetchAccessToken();
-            });
-
-            player.addListener('account_error', ({ message }) => {
-                console.error('Failed to validate Spotify account:', message);
-                alert('Account error: Premium required');
-            });
-
-            // Voeg een device checker knop toe
-            document.body.insertAdjacentHTML('beforeend', `
-                <div style="margin-top: 20px;">
-                    <button onclick="checkDevices()">Check Available Devices</button>
-                    <button onclick="reconnectPlayer()">Reconnect Player</button>
-                    <pre id="deviceList" style="background: #f0f0f0; padding: 10px;"></pre>
-                </div>
-            `);
-
-            // Connect to the player
-            const connected = await player.connect();
-            console.log('Player connected:', connected);
+            window.location.href = `${serverUrl}/login`;
         };
 
         document.getElementById('radio1').onclick = function () {
@@ -209,16 +56,13 @@
         }
 
         function pauseAll() {
-            if (player) {
-                player.pause().catch(error => console.error('Error pausing Spotify:', error));
-            }
             const existingFrame = document.getElementById('radioFrame');
             if (existingFrame) existingFrame.remove();
         }
 
         async function scanNetworks() {
             try {
-                const response = await fetch('http://raspberrypi-2.local:3001/networks');
+                const response = await fetch(`${serverUrl}/networks`);
                 const networks = await response.json();
                 const networkList = document.getElementById('networkList');
                 networkList.innerHTML = '';
@@ -245,7 +89,7 @@
             const ssid = document.getElementById('ssid').value;
             const password = document.getElementById('password').value;
             try {
-                const response = await fetch('http://raspberrypi-2.local:3001/connect', {
+                const response = await fetch(`${serverUrl}/connect`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ssid, password })
@@ -261,10 +105,9 @@
             }
         };
 
-        // Toon WiFi-configuratie als er geen verbinding is
         async function checkConnection() {
             try {
-                const response = await fetch('http://raspberrypi-2.local:3001/status');
+                const response = await fetch(`${serverUrl}/status`);
                 const status = await response.json();
                 if (!status.connected) {
                     document.getElementById('wifiConfig').style.display = 'block';
@@ -275,33 +118,6 @@
         }
 
         checkConnection();
-
-        // Functie om beschikbare apparaten te controleren
-        async function checkDevices() {
-            try {
-                const response = await fetch('https://api.spotify.com/v1/me/player/devices', {
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`
-                    }
-                });
-                const data = await response.json();
-                console.log('Available devices:', data);
-                document.getElementById('deviceList').textContent = 
-                    JSON.stringify(data.devices, null, 2);
-            } catch (error) {
-                console.error('Error checking devices:', error);
-                alert('Error checking devices: ' + error.message);
-            }
-        }
-
-        // Functie om de player te reconnecten
-        async function reconnectPlayer() {
-            if (player) {
-                await player.disconnect();
-            }
-            const connected = await player.connect();
-            console.log('Player reconnected:', connected);
-        }
     </script>
 </body>
 </html>
