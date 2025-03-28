@@ -95,9 +95,8 @@ sudo chown test:test /home/test/setup-wifi.sh
 
 # Configureer sudo rechten voor WiFi setup
 echo "Configuring sudo permissions for WiFi..."
-sudo bash -c 'cat > /etc/sudoers.d/wifi-permissions << EOF
-test ALL=(ALL) NOPASSWD: /home/test/setup-wifi.sh
-EOF'
+sudo bash -c 'echo "test ALL=(ALL) NOPASSWD: /usr/sbin/wpa_cli" > /etc/sudoers.d/wifi-permissions'
+sudo bash -c 'echo "test ALL=(ALL) NOPASSWD: /bin/tee -a /etc/wpa_supplicant/wpa_supplicant.conf" >> /etc/sudoers.d/wifi-permissions'
 sudo chmod 440 /etc/sudoers.d/wifi-permissions
 
 # Maak een service voor de Spotify-auth-server
@@ -198,3 +197,6 @@ aplay -l
 echo "Setup complete! The services are running."
 echo "Your Raspberry Pi should now appear as 'Raspberry Pi Speaker' in Spotify Connect"
 echo "Check the status of Raspotify with: sudo systemctl status raspotify"
+
+# Herstart de server
+sudo systemctl restart spotify-auth-server

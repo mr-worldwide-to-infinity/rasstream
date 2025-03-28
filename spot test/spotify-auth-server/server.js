@@ -143,30 +143,38 @@ app.post('/connect', (req, res) => {
         return res.status(400).json({ error: 'SSID is required' });
     }
 
-    const wpaConfig = `
+    console.log('Attempting to connect to WiFi:', ssid);
+
+    // Maak een tijdelijk configuratie bestand
+    const config = `
 network={
     ssid="${ssid}"
     psk="${password}"
     key_mgmt=WPA-PSK
 }`;
 
-    // Schrijf de configuratie naar een tijdelijk bestand
-    const tempFile = '/tmp/wifi_config.conf';
-    
     try {
-        // Schrijf naar tijdelijk bestand
-        fs.writeFileSync(tempFile, wpaConfig);
-        
-        // Voer het wifi-setup script uit met sudo
-        exec(`sudo /home/test/setup-wifi.sh "${ssid}" "${password}"`, (error, stdout, stderr) => {
+        // Schrijf direct naar wpa_supplicant met echo en sudo
+        exec(`echo '${config}' | sudo tee -a /etc/wpa_supplicant/wpa_supplicant.conf`, (error, stdout, stderr) => {
             if (error) {
-                console.error('Error setting up WiFi:', error);
+                console.error('Error writing WiFi config:', error);
                 console.error('stderr:', stderr);
-                return res.status(500).json({ error: 'Failed to setup WiFi connection' });
+                return res.status(500).json({ error: 'Error writing WiFi config' });
             }
-            
-            console.log('WiFi setup output:', stdout);
-            res.json({ success: true });
+
+            console.log('WiFi config written successfully');
+
+            // Herstart de WiFi verbinding
+            exec('sudo wpa_cli -i wlan0 reconfigure', (error, stdout, stderr) => {
+                if (error) {
+                    console.error('Error reconfiguring WiFi:', error);
+                    console.error('stderr:', stderr);
+                    return res.status(500).json({ error: 'Error reconfiguring WiFi' });
+                }
+
+                console.log('WiFi reconfigured successfully');
+                res.json({ success: true });
+            });
         });
     } catch (error) {
         console.error('Error in WiFi configuration:', error);
@@ -207,17 +215,22 @@ app.post('/radio/play', (req, res) => {
             return res.status(400).json({ error: 'Invalid station' });
     }
 
-    // Start de nieuwe radio stream met default audio device
-    radioProcess = spawn('mpg123', ['-a', 'default', '-q', streamUrl]);
+    console.log('Starting radio stream:', streamUrl);
+
+    // Start de nieuwe radio stream met ALSA output
+    radioProcess = spawn('mpg123', ['-o', 'alsa', '--no-control', streamUrl]);
     
+    radioProcess.stdout.on('data', (data) => {
+        console.log('mpg123 output:', data.toString());
+    });
+
+    radioProcess.stderr.on('data', (data) => {
+        console.error('mpg123 error:', data.toString());
+    });
+
     radioProcess.on('error', (error) => {
         console.error('Error playing radio:', error);
         res.status(500).json({ error: 'Failed to play radio' });
-    });
-
-    // Log stderr voor debugging
-    radioProcess.stderr.on('data', (data) => {
-        console.error('mpg123 error:', data.toString());
     });
 
     res.json({ success: true });
