@@ -3,7 +3,7 @@
 # Update en installeer vereisten
 echo "Updating system and installing dependencies..."
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y nodejs npm
+sudo apt install -y nodejs npm mpg123
 
 # Installeer http-server globaal
 echo "Installing http-server..."
