@@ -29,7 +29,7 @@
     <script>
         let player;
         let accessToken = '';
-        const serverUrl = 'http://localhost:3001'; // Server URL
+        const serverUrl = 'http://raspberrypi-2.local:3001'; // Server URL
 
         document.getElementById("loginSpotify").onclick = function() {
             window.location.href = `${serverUrl}/login`; // Start Spotify login flow
@@ -123,7 +123,7 @@
 
         async function scanNetworks() {
             try {
-                const response = await fetch('http://localhost:3001/networks');
+                const response = await fetch('http://raspberrypi-2.local:3001/networks');
                 const networks = await response.json();
                 const networkList = document.getElementById('networkList');
                 networkList.innerHTML = '';
@@ -150,7 +150,7 @@
             const ssid = document.getElementById('ssid').value;
             const password = document.getElementById('password').value;
             try {
-                const response = await fetch('http://localhost:3001/connect', {
+                const response = await fetch('http://raspberrypi-2.local:3001/connect', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ssid, password })
@@ -169,7 +169,7 @@
         // Toon WiFi-configuratie als er geen verbinding is
         async function checkConnection() {
             try {
-                const response = await fetch('http://localhost:3001/status');
+                const response = await fetch('http://raspberrypi-2.local:3001/status');
                 const status = await response.json();
                 if (!status.connected) {
                     document.getElementById('wifiConfig').style.display = 'block';
