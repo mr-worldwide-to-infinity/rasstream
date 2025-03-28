@@ -32,33 +32,30 @@
         };
 
         document.getElementById('radio1').onclick = function () {
-            playRadio("https://www.nederland.fm/radio/radio1");
+            fetch(`${serverUrl}/radio/play`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ station: 'radio1' })
+            });
         };
 
         document.getElementById('radio4').onclick = function () {
-            playRadio("https://www.nederland.fm/radio/radio4");
+            fetch(`${serverUrl}/radio/play`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ station: 'radio4' })
+            });
         };
 
         document.getElementById('pauseAll').onclick = function () {
-            pauseAll();
+            fetch(`${serverUrl}/radio/stop`, {
+                method: 'POST'
+            });
         };
-
-        function playRadio(url) {
-            const existingFrame = document.getElementById('radioFrame');
-            if (existingFrame) existingFrame.remove();
-
-            const iframe = document.createElement('iframe');
-            iframe.id = 'radioFrame';
-            iframe.src = url;
-            iframe.style.display = 'none';
-            iframe.allow = 'autoplay';
-            document.body.appendChild(iframe);
-        }
-
-        function pauseAll() {
-            const existingFrame = document.getElementById('radioFrame');
-            if (existingFrame) existingFrame.remove();
-        }
 
         async function scanNetworks() {
             try {

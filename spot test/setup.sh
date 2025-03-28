@@ -121,7 +121,7 @@ sudo systemctl status wifi-check
 
 # Installeer audio dependencies
 echo "Installing audio dependencies..."
-sudo apt install -y alsa-utils
+sudo apt install -y alsa-utils mpg123
 
 # Test audio setup
 echo "Testing audio setup..."

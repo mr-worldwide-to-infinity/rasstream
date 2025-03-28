@@ -4,7 +4,7 @@ const axios = require('axios');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const querystring = require('querystring');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const fs = require('fs');
 
 const app = express();
@@ -16,6 +16,9 @@ app.use(cookieParser());
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
+
+// Globale variabele om het radio proces bij te houden
+let radioProcess = null;
 
 // 🔹 1. Route om gebruiker naar Spotify login te sturen
 app.get('/login', (req, res) => {
@@ -173,6 +176,47 @@ app.get('/status', (req, res) => {
 
         res.json({ connected: true, ssid: stdout.trim() });
     });
+});
+
+// Radio endpoints
+app.post('/radio/play', (req, res) => {
+    const { station } = req.body;
+    
+    // Stop eerst eventuele bestaande radio
+    if (radioProcess) {
+        radioProcess.kill();
+        radioProcess = null;
+    }
+
+    let streamUrl;
+    switch(station) {
+        case 'radio1':
+            streamUrl = 'http://icecast.omroep.nl/radio1-bb-mp3';
+            break;
+        case 'radio4':
+            streamUrl = 'http://icecast.omroep.nl/radio4-bb-mp3';
+            break;
+        default:
+            return res.status(400).json({ error: 'Invalid station' });
+    }
+
+    // Start de nieuwe radio stream
+    radioProcess = spawn('mpg123', ['-q', streamUrl]);
+    
+    radioProcess.on('error', (error) => {
+        console.error('Error playing radio:', error);
+        res.status(500).json({ error: 'Failed to play radio' });
+    });
+
+    res.json({ success: true });
+});
+
+app.post('/radio/stop', (req, res) => {
+    if (radioProcess) {
+        radioProcess.kill();
+        radioProcess = null;
+    }
+    res.json({ success: true });
 });
 
 // 🔹 4. Start de server
