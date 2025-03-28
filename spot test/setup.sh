@@ -83,4 +83,15 @@ sudo systemctl stop dnsmasq
 sudo systemctl enable wifi-check
 sudo systemctl start wifi-check
 
+# Check welke processen poort 3001 gebruiken
+sudo lsof -i :3001
+
+# Check welke processen poort 5500 gebruiken
+sudo lsof -i :5500
+
+# Check de logs van elke service
+sudo journalctl -u spotify-auth-server -n 50
+sudo journalctl -u http-server -n 50
+sudo journalctl -u wifi-check -n 50
+
 echo "Setup complete! The server is running."
