@@ -94,4 +94,39 @@ sudo journalctl -u spotify-auth-server -n 50
 sudo journalctl -u http-server -n 50
 sudo journalctl -u wifi-check -n 50
 
+# Reset alle services
+sudo systemctl reset-failed
+sudo systemctl daemon-reload
+sudo systemctl stop spotify-auth-server
+sudo systemctl stop http-server
+sudo systemctl stop wifi-check
+
+# Debug commando's
+echo "Checking permissions..."
+ls -l /home/test/spotify-auth-server/server.js
+ls -l /home/test/wifi-check.sh
+
+echo "Checking Node.js installation..."
+which node
+node --version
+
+echo "Checking if ports are already in use..."
+sudo netstat -tulpn | grep -E ':3001|:5500'
+
+echo "Starting services with verbose logging..."
+sudo systemctl start spotify-auth-server --no-block
+sudo systemctl start http-server --no-block
+sudo systemctl start wifi-check --no-block
+
+echo "Waiting for services to start..."
+sleep 5
+
+echo "Checking service status..."
+sudo systemctl status spotify-auth-server
+sudo systemctl status http-server
+sudo systemctl status wifi-check
+
+echo "Checking logs..."
+sudo journalctl -xe
+
 echo "Setup complete! The server is running."
