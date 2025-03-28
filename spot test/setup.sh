@@ -32,6 +32,74 @@ echo "Starting Raspotify service..."
 sudo systemctl enable raspotify
 sudo systemctl restart raspotify
 
+# Maak WiFi setup script
+echo "Creating WiFi setup script..."
+sudo bash -c 'cat > /home/test/setup-wifi.sh << '\''EOF'\''
+#!/bin/bash
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then 
+    echo "Please run as root"
+    exit 1
+fi
+
+SSID="$1"
+PSK="$2"
+
+if [ -z "$SSID" ]; then
+    echo "SSID is required"
+    exit 1
+fi
+
+# Backup existing configuration
+cp /etc/wpa_supplicant/wpa_supplicant.conf /etc/wpa_supplicant/wpa_supplicant.conf.backup
+
+# Create new network configuration
+cat > /etc/wpa_supplicant/wpa_supplicant.conf << EOF
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country=NL
+
+network={
+    ssid="$SSID"
+    psk="$PSK"
+    key_mgmt=WPA-PSK
+}
+EOF
+
+# Set correct permissions
+chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+
+# Restart networking
+wpa_cli -i wlan0 reconfigure
+
+# Wait a bit for the connection
+sleep 5
+
+# Check if we got an IP address
+if ip addr show wlan0 | grep -q "inet "; then
+    echo "Successfully connected to WiFi network"
+    exit 0
+else
+    echo "Failed to connect to WiFi network"
+    # Restore backup
+    cp /etc/wpa_supplicant/wpa_supplicant.conf.backup /etc/wpa_supplicant/wpa_supplicant.conf
+    exit 1
+fi
+EOF'
+
+# Zet de juiste rechten voor het WiFi script
+echo "Setting permissions for WiFi setup script..."
+sudo chmod +x /home/test/setup-wifi.sh
+sudo chown test:test /home/test/setup-wifi.sh
+
+# Configureer sudo rechten voor WiFi setup
+echo "Configuring sudo permissions for WiFi..."
+sudo bash -c 'cat > /etc/sudoers.d/wifi-permissions << EOF
+test ALL=(ALL) NOPASSWD: /home/test/setup-wifi.sh
+EOF'
+sudo chmod 440 /etc/sudoers.d/wifi-permissions
+
 # Maak een service voor de Spotify-auth-server
 echo "Creating Spotify Auth Server service..."
 sudo bash -c 'cat > /etc/systemd/system/spotify-auth-server.service <<EOF
@@ -121,19 +189,11 @@ sudo systemctl status wifi-check
 
 # Installeer audio dependencies
 echo "Installing audio dependencies..."
-sudo apt install -y alsa-utils mpg123
+sudo apt install -y alsa-utils
 
 # Test audio setup
 echo "Testing audio setup..."
 aplay -l
-
-# Configureer sudo rechten voor WiFi configuratie
-echo "Configuring sudo permissions for WiFi..."
-sudo bash -c 'cat > /etc/sudoers.d/wifi-permissions <<EOF
-test ALL=(ALL) NOPASSWD: /bin/bash -c cat /tmp/wifi_network.conf >> /etc/wpa_supplicant/wpa_supplicant.conf
-test ALL=(ALL) NOPASSWD: /sbin/wpa_cli -i wlan0 reconfigure
-EOF'
-sudo chmod 440 /etc/sudoers.d/wifi-permissions
 
 echo "Setup complete! The services are running."
 echo "Your Raspberry Pi should now appear as 'Raspberry Pi Speaker' in Spotify Connect"
