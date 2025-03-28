@@ -4,29 +4,72 @@
     <title>Spotify and Radio Control</title>
 </head>
 <body>
-    <h1>Spotify and Radio Control</h1>
-    <button id="pauseAll">Stop Radio</button>
-    <button id="radio1">Radio 1</button>
-    <button id="radio4">Radio 4</button>
-    <button id="loginSpotify">Login met Spotify</button>
+    <div id="statusContainer">
+        <h2>Network Status</h2>
+        <div id="networkStatus">Checking connection...</div>
+    </div>
 
-    <!-- WiFi configuratie sectie -->
-    <div id="wifiConfig" style="display: none;">
-        <h2>WiFi Configuratie</h2>
-        <button id="scanNetworks">Scan Netwerken</button>
+    <div id="wifiConfig">
+        <h2>WiFi Configuration</h2>
+        <button id="scanNetworks">Scan Networks</button>
         <ul id="networkList"></ul>
         <form id="wifiForm" style="display: none;">
             <label for="ssid">SSID:</label>
             <input type="text" id="ssid" name="ssid" required>
-            <label for="password">Wachtwoord:</label>
+            <label for="password">Password:</label>
             <input type="password" id="password" name="password">
-            <button type="submit">Verbinden</button>
+            <button type="submit">Connect</button>
         </form>
+    </div>
+
+    <div id="spotifyContainer" style="display: none;">
+        <h2>Spotify and Radio Control</h2>
+        <button id="loginSpotify">Login met Spotify</button>
+        <button id="pauseAll">Stop Radio</button>
+        <button id="radio1">Radio 1</button>
+        <button id="radio4">Radio 4</button>
     </div>
 
     <script>
         const serverUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
 
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+
+        async function checkConnection() {
+            try {
+                const response = await fetch(`${serverUrl}/status`);
+                const status = await response.json();
+                if (status.connected) {
+                    document.getElementById('networkStatus').textContent = 
+                        `Connected to: ${status.ssid}`;
+                    document.getElementById('wifiConfig').style.display = 'none';
+                    document.getElementById('spotifyContainer').style.display = 'block';
+                    if (window.lastConnectionState === false) {
+                        reconnectAttempts = 0;
+                        location.reload();
+                    }
+                    window.lastConnectionState = true;
+                } else {
+                    document.getElementById('networkStatus').textContent = 
+                        'Not connected to any network';
+                    document.getElementById('wifiConfig').style.display = 'block';
+                    document.getElementById('spotifyContainer').style.display = 'none';
+                    window.lastConnectionState = false;
+                }
+            } catch (error) {
+                document.getElementById('networkStatus').textContent = 
+                    'Unable to check connection status';
+                document.getElementById('wifiConfig').style.display = 'block';
+                window.lastConnectionState = false;
+            }
+        }
+
+        // Voer checkConnection uit bij laden en elke 30 seconden
+        checkConnection();
+        setInterval(checkConnection, 30000);
+
+        // Bestaande event listeners
         document.getElementById("loginSpotify").onclick = function() {
             window.location.href = `${serverUrl}/login`;
         };
@@ -81,7 +124,7 @@
 
         document.getElementById('scanNetworks').onclick = scanNetworks;
 
-        document.getElementById('wifiForm').onsubmit = async function (event) {
+        document.getElementById('wifiForm').onsubmit = async function(event) {
             event.preventDefault();
             const ssid = document.getElementById('ssid').value;
             const password = document.getElementById('password').value;
@@ -94,27 +137,24 @@
                 const result = await response.json();
                 if (result.success) {
                     alert('Verbonden met WiFi-netwerk!');
+                    // Meerdere pogingen om verbinding te controleren
+                    const checkInterval = setInterval(() => {
+                        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                            clearInterval(checkInterval);
+                            alert('Kon geen verbinding maken na meerdere pogingen');
+                            return;
+                        }
+                        reconnectAttempts++;
+                        checkConnection();
+                    }, 5000);
                 } else {
                     alert('Fout bij verbinden: ' + result.error);
                 }
             } catch (error) {
                 console.error('Fout bij verbinden met netwerk:', error);
+                alert('Fout bij verbinden met netwerk');
             }
         };
-
-        async function checkConnection() {
-            try {
-                const response = await fetch(`${serverUrl}/status`);
-                const status = await response.json();
-                if (!status.connected) {
-                    document.getElementById('wifiConfig').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Fout bij controleren van verbinding:', error);
-            }
-        }
-
-        checkConnection();
     </script>
 </body>
 </html>
