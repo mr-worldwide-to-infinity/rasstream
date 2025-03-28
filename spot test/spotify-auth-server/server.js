@@ -147,24 +147,37 @@ app.post('/connect', (req, res) => {
 network={
     ssid="${ssid}"
     psk="${password}"
-}
-`;
+}`;
 
-    fs.appendFile('/etc/wpa_supplicant/wpa_supplicant.conf', wpaSupplicantConfig, (err) => {
-        if (err) {
-            console.error('Error updating WiFi config:', err);
-            return res.status(500).json({ error: 'Error updating WiFi config' });
-        }
-
-        exec('wpa_cli -i wlan0 reconfigure', (error) => {
+    // Schrijf eerst naar een tijdelijk bestand
+    const tempFile = '/tmp/wifi_network.conf';
+    try {
+        fs.writeFileSync(tempFile, wpaSupplicantConfig);
+        
+        // Gebruik sudo om het bestand te kopiëren
+        exec(`sudo bash -c 'cat ${tempFile} >> /etc/wpa_supplicant/wpa_supplicant.conf'`, (error) => {
             if (error) {
-                console.error('Error reconnecting to WiFi:', error);
-                return res.status(500).json({ error: 'Error reconnecting to WiFi' });
+                console.error('Error updating WiFi config:', error);
+                return res.status(500).json({ error: 'Error updating WiFi config' });
             }
 
-            res.json({ success: true });
+            // Verwijder het tijdelijke bestand
+            fs.unlinkSync(tempFile);
+
+            // Herstart de WiFi verbinding
+            exec('sudo wpa_cli -i wlan0 reconfigure', (error) => {
+                if (error) {
+                    console.error('Error reconnecting to WiFi:', error);
+                    return res.status(500).json({ error: 'Error reconnecting to WiFi' });
+                }
+
+                res.json({ success: true });
+            });
         });
-    });
+    } catch (error) {
+        console.error('Error in WiFi configuration:', error);
+        res.status(500).json({ error: 'Error in WiFi configuration' });
+    }
 });
 
 // 🔹 Endpoint om de verbindingsstatus te controleren
