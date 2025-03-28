@@ -14,6 +14,24 @@ echo "Installing project dependencies..."
 cd /home/test/spotify-auth-server
 npm install
 
+# Installeer Librespot (Spotify Connect client)
+echo "Installing Librespot..."
+curl -sL https://dtcooper.github.io/raspotify/install.sh | sh
+
+# Configureer Librespot
+echo "Configuring Librespot..."
+sudo bash -c 'cat > /etc/raspotify/conf <<EOF
+LIBRESPOT_NAME="Raspberry Pi Speaker"
+LIBRESPOT_BACKEND="alsa"
+LIBRESPOT_DEVICE="default:CARD=0"
+LIBRESPOT_INITIAL_VOLUME="100"
+EOF'
+
+# Start en enable Raspotify service
+echo "Starting Raspotify service..."
+sudo systemctl enable raspotify
+sudo systemctl restart raspotify
+
 # Maak een service voor de Spotify-auth-server
 echo "Creating Spotify Auth Server service..."
 sudo bash -c 'cat > /etc/systemd/system/spotify-auth-server.service <<EOF
@@ -90,50 +108,25 @@ sudo systemctl stop dnsmasq
 sudo systemctl enable wifi-check
 sudo systemctl start wifi-check
 
-# Check welke processen poort 3001 gebruiken
-sudo lsof -i :3001
-
-# Check welke processen poort 5500 gebruiken
-sudo lsof -i :5500
-
-# Check de logs van elke service
-sudo journalctl -u spotify-auth-server -n 50
-sudo journalctl -u http-server -n 50
-sudo journalctl -u wifi-check -n 50
-
-# Reset alle services
-sudo systemctl reset-failed
-sudo systemctl daemon-reload
-sudo systemctl stop spotify-auth-server
-sudo systemctl stop http-server
-sudo systemctl stop wifi-check
-
-# Debug commando's
-echo "Checking permissions..."
-ls -l /home/test/spotify-auth-server/server.js
-ls -l /home/test/wifi-check.sh
-
-echo "Checking Node.js installation..."
-which node
-node --version
-
-echo "Checking if ports are already in use..."
-sudo netstat -tulpn | grep -E ':3001|:5500'
-
-echo "Starting services with verbose logging..."
-sudo systemctl start spotify-auth-server --no-block
-sudo systemctl start http-server --no-block
-sudo systemctl start wifi-check --no-block
-
-echo "Waiting for services to start..."
-sleep 5
-
+# Check services status
 echo "Checking service status..."
+echo "Spotify Auth Server status:"
 sudo systemctl status spotify-auth-server
+echo "HTTP Server status:"
 sudo systemctl status http-server
+echo "Raspotify status:"
+sudo systemctl status raspotify
+echo "WiFi Check status:"
 sudo systemctl status wifi-check
 
-echo "Checking logs..."
-sudo journalctl -xe
+# Installeer audio dependencies
+echo "Installing audio dependencies..."
+sudo apt install -y alsa-utils
 
-echo "Setup complete! The server is running."
+# Test audio setup
+echo "Testing audio setup..."
+aplay -l
+
+echo "Setup complete! The services are running."
+echo "Your Raspberry Pi should now appear as 'Raspberry Pi Speaker' in Spotify Connect"
+echo "Check the status of Raspotify with: sudo systemctl status raspotify"
