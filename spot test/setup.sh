@@ -34,8 +34,9 @@ option interface_mtu
 require dhcp_server_identifier
 slaac private
 
-# Statisch IP alleen voor AP mode (wordt alleen gebruikt als hostapd draait)
+# AP mode configuratie
 interface wlan0
+    static ip_address=192.168.4.1/24
     nohook wpa_supplicant
 EOF'
 
@@ -130,19 +131,29 @@ EOF'
 echo "Setting up wifi-check script..."
 sudo chmod +x /home/test/wifi-check.sh
 
-# Enable services
-echo "Enabling services..."
-sudo systemctl unmask hostapd
-sudo systemctl enable hostapd
-sudo systemctl enable dnsmasq
-sudo systemctl enable wifi-check.service
-sudo systemctl enable spotify-auth-server
-sudo systemctl enable http-server
+# Voeg deze regels toe voor de "Start services" sectie:
+# Maak zeker dat de services in de juiste volgorde starten
+sudo bash -c 'cat > /etc/systemd/system/ap-mode.service <<EOF
+[Unit]
+Description=Access Point Mode Service
+After=network.target
+Before=hostapd.service dnsmasq.service
 
-# Start services
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c "ip link set wlan0 down && ip addr flush dev wlan0 && ip link set wlan0 up && ip addr add 192.168.4.1/24 dev wlan0"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF'
+
+# Enable de nieuwe service
+sudo systemctl enable ap-mode.service
+
+# Update de Start services sectie:
 echo "Starting services..."
-sudo ip addr add 192.168.4.1/24 dev wlan0
-sudo systemctl restart dhcpcd
+sudo systemctl start ap-mode
 sudo systemctl start hostapd
 sudo systemctl start dnsmasq
 sudo systemctl start wifi-check.service
