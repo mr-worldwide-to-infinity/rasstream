@@ -27,6 +27,9 @@ const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 // Globale variabele om het radio proces bij te houden
 let radioProcess = null;
 
+// Voeg deze variabele toe bij de andere globale variabelen
+let librespotProcess = null;
+
 // Voeg deze helper functie toe bovenaan het bestand na de imports
 async function getServerUrl() {
     return 'spotStream.local';
@@ -342,6 +345,56 @@ app.post('/radio/stop', (req, res) => {
         radioProcess = null;
     }
     res.json({ success: true });
+});
+
+// Voeg deze nieuwe route toe
+app.post('/spotify/start', async (req, res) => {
+    try {
+        // Stop bestaande processen indien nodig
+        if (librespotProcess) {
+            librespotProcess.kill();
+        }
+        if (radioProcess) {
+            radioProcess.kill();
+            radioProcess = null;
+        }
+
+        // Start librespot met de access token
+        librespotProcess = spawn('librespot', [
+            '--name', 'SpotStream',
+            '--backend', 'alsa',
+            '--device-type', 'speaker',
+            '--initial-volume', '100',
+            '--onevent', '/usr/bin/logger'
+        ]);
+
+        librespotProcess.stdout.on('data', (data) => {
+            console.log('librespot output:', data.toString());
+        });
+
+        librespotProcess.stderr.on('data', (data) => {
+            console.error('librespot error:', data.toString());
+        });
+
+        librespotProcess.on('close', (code) => {
+            console.log('librespot process exited with code', code);
+        });
+
+        res.json({ success: true, message: 'Spotify Connect receiver started' });
+    } catch (error) {
+        console.error('Error starting Spotify:', error);
+        res.status(500).json({ error: 'Failed to start Spotify receiver' });
+    }
+});
+
+app.post('/spotify/stop', (req, res) => {
+    if (librespotProcess) {
+        librespotProcess.kill();
+        librespotProcess = null;
+        res.json({ success: true, message: 'Spotify Connect receiver stopped' });
+    } else {
+        res.json({ success: false, message: 'No Spotify receiver running' });
+    }
 });
 
 // 🔹 5. Start de server
