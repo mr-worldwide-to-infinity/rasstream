@@ -34,6 +34,8 @@ interface=wlan0
 dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
 bind-interfaces
 server=8.8.8.8
+dhcp-option=3,192.168.4.1
+dhcp-option=6,192.168.4.1
 EOF'
 
 # Configureer hostapd
