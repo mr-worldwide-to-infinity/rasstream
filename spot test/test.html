@@ -31,12 +31,48 @@
     </div>
 
     <script>
-        const serverUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
+        let serverUrl;
+
+        async function determineServerUrl() {
+            try {
+                // Probeer eerst het huidige IP te gebruiken
+                const currentUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
+                const response = await fetch(`${currentUrl}/status`);
+                if (response.ok) {
+                    serverUrl = currentUrl;
+                    console.log('Using current network URL:', serverUrl);
+                    return;
+                }
+            } catch (error) {
+                console.log('Could not connect using current IP, trying AP IP...');
+            }
+
+            try {
+                // Als het huidige IP niet werkt, probeer het AP IP
+                const apUrl = 'http://192.168.4.1:3001';
+                const response = await fetch(`${apUrl}/status`);
+                if (response.ok) {
+                    serverUrl = apUrl;
+                    console.log('Using AP URL:', serverUrl);
+                    return;
+                }
+            } catch (error) {
+                console.log('Could not connect using AP IP');
+            }
+
+            // Als beide niet werken, gebruik het huidige IP als fallback
+            serverUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
+            console.log('Using fallback URL:', serverUrl);
+        }
 
         let reconnectAttempts = 0;
         const MAX_RECONNECT_ATTEMPTS = 3;
 
         async function checkConnection() {
+            if (!serverUrl) {
+                await determineServerUrl();
+            }
+            
             try {
                 const response = await fetch(`${serverUrl}/status`);
                 const status = await response.json();
@@ -59,12 +95,16 @@
                 console.error('Error checking connection:', error);
                 document.getElementById('networkStatus').textContent = 'Unable to check connection status';
                 document.getElementById('wifiConfig').style.display = 'block';
+                await determineServerUrl();
             }
         }
 
-        // Voer checkConnection uit bij laden en elke 30 seconden
-        checkConnection();
-        setInterval(checkConnection, 30000);
+        // Voer dit uit bij het laden van de pagina
+        determineServerUrl().then(() => {
+            // Start de normale check nadat we de juiste URL hebben
+            checkConnection();
+            setInterval(checkConnection, 30000);
+        });
 
         // Bestaande event listeners
         document.getElementById("loginSpotify").onclick = function() {

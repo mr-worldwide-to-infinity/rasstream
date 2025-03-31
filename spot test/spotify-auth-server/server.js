@@ -10,7 +10,14 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+// Vervang de bestaande CORS configuratie
+app.use(cors({
+    origin: function(origin, callback) {
+        // Accept requests from any origin during development
+        callback(null, true);
+    },
+    credentials: true
+}));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -114,7 +121,7 @@ app.get('/check-token', (req, res) => {
 // 🔹 Endpoint om de verbindingsstatus te controleren
 app.get('/status', (req, res) => {
     // Check eerst of we in AP mode zijn
-    exec('systemctl is-active hostapd', (error, stdout) => {
+    exec('sudo systemctl is-active hostapd', (error, stdout) => {
         const isAPMode = stdout.trim() === 'active';
         
         if (isAPMode) {

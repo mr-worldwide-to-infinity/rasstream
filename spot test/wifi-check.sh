@@ -13,20 +13,25 @@ check_internet() {
 start_ap_mode() {
     echo "Starting AP mode..."
     
-    # Stop bestaande services
+    # Stop alle netwerk services eerst
+    sudo systemctl stop dhcpcd
     sudo systemctl stop wpa_supplicant
     sudo systemctl stop hostapd
     sudo systemctl stop dnsmasq
     
-    # Reset de interface
+    # Reset de interface volledig
     sudo ip link set wlan0 down
     sudo ip addr flush dev wlan0
     sudo ip link set wlan0 up
     
+    # Wacht even voor de interface
+    sleep 2
+    
     # Configureer statisch IP
     sudo ip addr add 192.168.4.1/24 dev wlan0
     
-    # Start AP services
+    # Start services in de juiste volgorde
+    sudo systemctl start dhcpcd
     sudo systemctl start hostapd
     sudo systemctl start dnsmasq
     
