@@ -34,29 +34,33 @@
         let serverUrl;
 
         async function determineServerUrl() {
+            console.log('Determining server URL...');
+            
+            // Probeer eerst spotStream.local
             const hostname = 'spotStream.local';
             serverUrl = `http://${hostname}:3001`;
-            console.log('Using hostname URL:', serverUrl);
             
             try {
-                const response = await fetch(`${serverUrl}/status`);
-                if (!response.ok) {
-                    console.log('Could not connect using hostname, falling back to IP...');
-                    // Fallback naar IP als hostname niet werkt
-                    if (window.location.hostname === '192.168.4.1') {
-                        serverUrl = 'http://192.168.4.1:3001';
-                    } else {
-                        serverUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
-                    }
+                console.log('Trying hostname:', serverUrl);
+                const response = await fetch(`${serverUrl}/status`, {
+                    timeout: 5000
+                });
+                if (response.ok) {
+                    console.log('Successfully connected using hostname');
+                    return;
                 }
             } catch (error) {
-                console.log('Error connecting to server:', error);
-                // Fallback naar IP als hostname niet werkt
-                if (window.location.hostname === '192.168.4.1') {
-                    serverUrl = 'http://192.168.4.1:3001';
-                } else {
-                    serverUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
-                }
+                console.log('Could not connect using hostname:', error);
+            }
+            
+            // Fallback naar IP-gebaseerde URL
+            const currentHostname = window.location.hostname;
+            if (currentHostname === '192.168.4.1' || currentHostname.includes('192.168.4')) {
+                serverUrl = 'http://192.168.4.1:3001';
+                console.log('Using AP IP:', serverUrl);
+            } else {
+                serverUrl = `${window.location.protocol}//${currentHostname}:3001`;
+                console.log('Using current hostname:', serverUrl);
             }
         }
 
@@ -69,18 +73,34 @@
             }
             
             try {
+                console.log('Checking connection status...');
                 const response = await fetch(`${serverUrl}/status`);
                 const status = await response.json();
+                console.log('Status response:', status);
+                
                 const networkStatus = document.getElementById('networkStatus');
                 
-                if (status.mode === 'AP') {
-                    networkStatus.textContent = 'Running in Access Point mode';
+                if (status.error) {
+                    console.error('Status error:', status.error);
+                    networkStatus.textContent = `Error: ${status.error}`;
                     document.getElementById('wifiConfig').style.display = 'block';
                     document.getElementById('spotifyContainer').style.display = 'none';
-                } else if (status.connected) {
+                    return;
+                }
+                
+                if (status.mode === 'AP') {
+                    networkStatus.textContent = 'Running in Access Point mode (SpotStream)\nConnect to this network to configure WiFi';
+                    document.getElementById('wifiConfig').style.display = 'block';
+                    document.getElementById('spotifyContainer').style.display = 'none';
+                } else if (status.connected && status.ssid) {
                     networkStatus.textContent = `Connected to: ${status.ssid}\nIP: ${status.ip}\nInternet: ${status.internet ? 'Yes' : 'No'}`;
-                    document.getElementById('wifiConfig').style.display = 'none';
-                    document.getElementById('spotifyContainer').style.display = 'block';
+                    if (status.internet) {
+                        document.getElementById('wifiConfig').style.display = 'none';
+                        document.getElementById('spotifyContainer').style.display = 'block';
+                    } else {
+                        document.getElementById('wifiConfig').style.display = 'block';
+                        document.getElementById('spotifyContainer').style.display = 'none';
+                    }
                 } else {
                     networkStatus.textContent = status.message || 'Not connected to any network';
                     document.getElementById('wifiConfig').style.display = 'block';
@@ -88,17 +108,25 @@
                 }
             } catch (error) {
                 console.error('Error checking connection:', error);
-                document.getElementById('networkStatus').textContent = 'Unable to check connection status';
+                document.getElementById('networkStatus').textContent = 'Unable to check connection status. Retrying...';
                 document.getElementById('wifiConfig').style.display = 'block';
+                document.getElementById('spotifyContainer').style.display = 'none';
+                // Probeer de server URL opnieuw te bepalen
                 await determineServerUrl();
             }
         }
 
         // Voer dit uit bij het laden van de pagina
         determineServerUrl().then(() => {
-            // Start de normale check nadat we de juiste URL hebben
             checkConnection();
-            setInterval(checkConnection, 30000);
+            // Check elke 10 seconden in plaats van 30
+            const intervalId = setInterval(async () => {
+                try {
+                    await checkConnection();
+                } catch (error) {
+                    console.error('Error in connection check interval:', error);
+                }
+            }, 10000);
         });
 
         // Bestaande event listeners
@@ -160,31 +188,45 @@
             event.preventDefault();
             const ssid = document.getElementById('ssid').value;
             const password = document.getElementById('password').value;
+            
+            document.getElementById('networkStatus').textContent = 'Connecting to WiFi...';
+            reconnectAttempts = 0;
+            
             try {
                 const response = await fetch(`${serverUrl}/connect`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ssid, password })
                 });
+                
                 const result = await response.json();
                 if (result.success) {
-                    alert('Verbonden met WiFi-netwerk!');
-                    // Meerdere pogingen om verbinding te controleren
-                    const checkInterval = setInterval(() => {
+                    document.getElementById('networkStatus').textContent = 'WiFi connection successful! Checking status...';
+                    
+                    // Wacht even en check dan de status meerdere keren
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    
+                    const checkInterval = setInterval(async () => {
                         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
                             clearInterval(checkInterval);
-                            alert('Kon geen verbinding maken na meerdere pogingen');
+                            document.getElementById('networkStatus').textContent = 'Could not verify connection after multiple attempts';
                             return;
                         }
                         reconnectAttempts++;
-                        checkConnection();
+                        await checkConnection();
+                        
+                        // Stop het checken als we verbonden zijn
+                        const status = await fetch(`${serverUrl}/status`).then(r => r.json());
+                        if (status.connected && status.internet) {
+                            clearInterval(checkInterval);
+                        }
                     }, 5000);
                 } else {
-                    alert('Fout bij verbinden: ' + result.error);
+                    document.getElementById('networkStatus').textContent = `Connection failed: ${result.error}`;
                 }
             } catch (error) {
-                console.error('Fout bij verbinden met netwerk:', error);
-                alert('Fout bij verbinden met netwerk');
+                console.error('Error connecting to network:', error);
+                document.getElementById('networkStatus').textContent = 'Connection failed. Please try again.';
             }
         };
     </script>

@@ -160,7 +160,7 @@ app.get('/status', async (req, res) => {
 
         if (hasWifiConnection && ipAddress) {
             // Check internet
-            const hasInternet = await execPromise('ping -c 1 -W 1 8.8.8.8').then(() => true).catch(() => false);
+            const hasInternet = await execPromise('ping -c 1 8.8.8.8').then(() => true).catch(() => false);
             
             return res.json({
                 connected: true,
@@ -174,7 +174,7 @@ app.get('/status', async (req, res) => {
         return res.json({
             connected: false,
             mode: 'client',
-            message: 'Not connected to any network'
+            message: 'Not connected to any network22'
         });
 
     } catch (error) {
