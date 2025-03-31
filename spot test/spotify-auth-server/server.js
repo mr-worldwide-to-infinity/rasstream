@@ -139,31 +139,36 @@ app.get('/check-token', (req, res) => {
 
 // 🔹 Endpoint om de verbindingsstatus te controleren
 app.get('/status', (req, res) => {
-    // Check eerst of we in AP mode zijn
-    exec('sudo systemctl is-active hostapd', (error, stdout) => {
-        const isAPMode = stdout.trim() === 'active';
-        
-        if (isAPMode) {
-            return res.json({ 
-                connected: false,
-                mode: 'AP',
-                message: 'Running in Access Point mode'
+    // Helper functie om commands uit te voeren
+    const execPromise = (command) => {
+        return new Promise((resolve, reject) => {
+            exec(command, (error, stdout, stderr) => {
+                if (error) reject(error);
+                else resolve(stdout.trim());
             });
-        }
+        });
+    };
 
-        // Als we niet in AP mode zijn, check de client verbinding
-        exec('iwconfig wlan0', (error, stdout) => {
-            if (error) {
-                console.error('Error checking wifi status:', error);
+    // Check alle netwerk informatie
+    async function checkNetworkStatus() {
+        try {
+            // Check AP mode
+            const hostapd = await execPromise('sudo systemctl is-active hostapd');
+            const isAPMode = hostapd === 'active';
+
+            if (isAPMode) {
+                const apIP = await execPromise('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"');
                 return res.json({ 
-                    connected: false,
-                    mode: 'unknown',
-                    error: 'Failed to check connection status'
+                    connected: true,
+                    mode: 'AP',
+                    ip: apIP,
+                    message: 'Running in Access Point mode'
                 });
             }
 
-            // Check voor "ESSID:off/any" wat betekent dat we niet verbonden zijn
-            if (stdout.includes('ESSID:off/any')) {
+            // Check client mode
+            const iwconfig = await execPromise('iwconfig wlan0');
+            if (iwconfig.includes('ESSID:off/any')) {
                 return res.json({ 
                     connected: false,
                     mode: 'client',
@@ -171,32 +176,44 @@ app.get('/status', (req, res) => {
                 });
             }
 
-            // Haal SSID op
-            exec('iwgetid -r', (error, stdout) => {
-                if (error || !stdout.trim()) {
-                    return res.json({ 
-                        connected: false,
-                        mode: 'client',
-                        message: 'Could not determine connected network'
-                    });
-                }
+            // Get network details
+            const ssid = await execPromise('iwgetid -r');
+            const ip = await execPromise('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"');
+            
+            // Check internet
+            let hasInternet = false;
+            try {
+                await execPromise('ping -c 1 -W 1 8.8.8.8');
+                hasInternet = true;
+            } catch (error) {
+                hasInternet = false;
+            }
 
-                // Check internet connectiviteit
-                exec('ping -c 1 -W 1 8.8.8.8', (error) => {
-                    const hasInternet = !error;
-                    
-                    // Haal IP adres op
-                    exec('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"', (error, ipStdout) => {
-                        res.json({
-                            connected: true,
-                            mode: 'client',
-                            ssid: stdout.trim(),
-                            ip: ipStdout ? ipStdout.trim() : null,
-                            internet: hasInternet
-                        });
-                    });
-                });
+            return res.json({
+                connected: true,
+                mode: 'client',
+                ssid: ssid,
+                ip: ip,
+                internet: hasInternet
             });
+
+        } catch (error) {
+            console.error('Error checking network status:', error);
+            return res.json({ 
+                connected: false,
+                mode: 'unknown',
+                error: 'Failed to check connection status',
+                details: error.message
+            });
+        }
+    }
+
+    // Voer de check uit
+    checkNetworkStatus().catch(error => {
+        console.error('Status check failed:', error);
+        res.status(500).json({ 
+            error: 'Status check failed', 
+            details: error.message 
         });
     });
 });

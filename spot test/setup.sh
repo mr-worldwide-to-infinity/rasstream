@@ -54,7 +54,7 @@ EOF'
 sudo bash -c 'cat > /etc/hostapd/hostapd.conf <<EOF
 interface=wlan0
 driver=nl80211
-ssid=RaspberryPiAP
+ssid=SpotStream
 hw_mode=g
 channel=7
 wmm_enabled=1
@@ -192,4 +192,9 @@ esac
 EOF'
 
 sudo chmod +x /home/test/toggle-wifi-mode.sh
+
+# Voeg deze regel toe na de system update
+echo "Setting hostname..."
+sudo hostnamectl set-hostname spotStream
+sudo sed -i 's/127.0.1.1.*raspberrypi/127.0.1.1\tspotStream/g' /etc/hosts
 

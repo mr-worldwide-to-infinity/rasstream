@@ -34,35 +34,30 @@
         let serverUrl;
 
         async function determineServerUrl() {
+            const hostname = 'spotStream.local';
+            serverUrl = `http://${hostname}:3001`;
+            console.log('Using hostname URL:', serverUrl);
+            
             try {
-                // Probeer eerst het huidige IP te gebruiken
-                const currentUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
-                const response = await fetch(`${currentUrl}/status`);
-                if (response.ok) {
-                    serverUrl = currentUrl;
-                    console.log('Using current network URL:', serverUrl);
-                    return;
+                const response = await fetch(`${serverUrl}/status`);
+                if (!response.ok) {
+                    console.log('Could not connect using hostname, falling back to IP...');
+                    // Fallback naar IP als hostname niet werkt
+                    if (window.location.hostname === '192.168.4.1') {
+                        serverUrl = 'http://192.168.4.1:3001';
+                    } else {
+                        serverUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
+                    }
                 }
             } catch (error) {
-                console.log('Could not connect using current IP, trying AP IP...');
-            }
-
-            try {
-                // Als het huidige IP niet werkt, probeer het AP IP
-                const apUrl = 'http://192.168.4.1:3001';
-                const response = await fetch(`${apUrl}/status`);
-                if (response.ok) {
-                    serverUrl = apUrl;
-                    console.log('Using AP URL:', serverUrl);
-                    return;
+                console.log('Error connecting to server:', error);
+                // Fallback naar IP als hostname niet werkt
+                if (window.location.hostname === '192.168.4.1') {
+                    serverUrl = 'http://192.168.4.1:3001';
+                } else {
+                    serverUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
                 }
-            } catch (error) {
-                console.log('Could not connect using AP IP');
             }
-
-            // Als beide niet werken, gebruik het huidige IP als fallback
-            serverUrl = window.location.protocol + '//' + window.location.hostname + ':3001';
-            console.log('Using fallback URL:', serverUrl);
         }
 
         let reconnectAttempts = 0;
