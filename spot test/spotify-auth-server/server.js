@@ -130,8 +130,18 @@ app.get('/networks', (req, res) => {
     });
 });
 
-// 🔹 Endpoint om verbinding te maken met een WiFi-netwerk
+// 🔹 Endpoint om de verbindingsstatus te controleren
+app.get('/status', (req, res) => {
+    exec('iwgetid -r', (error, stdout) => {
+        if (error || !stdout.trim()) {
+            return res.json({ connected: false });
+        }
 
+        res.json({ connected: true, ssid: stdout.trim() });
+    });
+});
+
+// 🔹 Endpoint om verbinding te maken met een WiFi-netwerk
 app.post('/connect', (req, res) => {
     const { ssid, password } = req.body;
 
@@ -181,18 +191,6 @@ app.post('/connect', (req, res) => {
                 });
             }, 10000);
         });
-    });
-});
-
-
-// 🔹 Endpoint om de verbindingsstatus te controleren
-app.get('/status', (req, res) => {
-    exec('iwgetid -r', (error, stdout) => {
-        if (error || !stdout.trim()) {
-            return res.json({ connected: false });
-        }
-
-        res.json({ connected: true, ssid: stdout.trim() });
     });
 });
 

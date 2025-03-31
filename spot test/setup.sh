@@ -22,9 +22,20 @@ echo "Configuring WiFi Access Point..."
 sudo rfkill unblock all
 
 # Configureer dhcpcd
-sudo bash -c 'cat >> /etc/dhcpcd.conf <<EOF
+sudo bash -c 'cat > /etc/dhcpcd.conf <<EOF
+# Standaard configuratie
+hostname
+clientid
+persistent
+option rapid_commit
+option domain_name_servers, domain_name, domain_search, host_name
+option classless_static_routes
+option interface_mtu
+require dhcp_server_identifier
+slaac private
+
+# Statisch IP alleen voor AP mode (wordt alleen gebruikt als hostapd draait)
 interface wlan0
-    static ip_address=192.168.4.1/24
     nohook wpa_supplicant
 EOF'
 
@@ -105,7 +116,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/http-server /home/test -p 5500 --cors
+ExecStart=/usr/local/bin/http-server /home/test -p 5500 --cors -a 0.0.0.0
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=/home/test
 Restart=on-failure
@@ -140,4 +151,34 @@ sudo systemctl start http-server
 
 echo "Setup complete! The services are running."
 echo "Your Raspberry Pi should now appear as 'Raspberry Pi Speaker' in Spotify Connect"
+
+sudo bash -c 'cat > /home/test/toggle-wifi-mode.sh <<EOF
+#!/bin/bash
+
+function start_ap_mode() {
+    # Configureer statisch IP voor AP mode
+    sudo ip addr flush dev wlan0
+    sudo ip addr add 192.168.4.1/24 dev wlan0
+    sudo systemctl start hostapd
+    sudo systemctl start dnsmasq
+}
+
+function start_client_mode() {
+    # Verwijder statisch IP en laat DHCP het overnemen
+    sudo ip addr flush dev wlan0
+    sudo dhclient -r wlan0
+    sudo dhclient wlan0
+}
+
+case "$1" in
+    "ap")
+        start_ap_mode
+        ;;
+    "client")
+        start_client_mode
+        ;;
+esac
+EOF'
+
+sudo chmod +x /home/test/toggle-wifi-mode.sh
 
