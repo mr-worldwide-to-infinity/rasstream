@@ -131,6 +131,7 @@ app.get('/networks', (req, res) => {
 });
 
 // 🔹 Endpoint om verbinding te maken met een WiFi-netwerk
+
 app.post('/connect', (req, res) => {
     const { ssid, password } = req.body;
 
@@ -182,6 +183,7 @@ app.post('/connect', (req, res) => {
         });
     });
 });
+
 
 // 🔹 Endpoint om de verbindingsstatus te controleren
 app.get('/status', (req, res) => {
