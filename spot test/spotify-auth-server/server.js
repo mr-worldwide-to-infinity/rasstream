@@ -145,18 +145,30 @@ app.get('/status', async (req, res) => {
         const hostapdStatus = await execPromise('systemctl is-active hostapd');
         const isAPMode = hostapdStatus === 'active';
 
+        // Haal IP adres op een meer directe manier
+        let ipAddress;
+        try {
+            const ipOutput = await execPromise('ip -4 addr show wlan0');
+            const ipMatch = ipOutput.match(/inet\s+(\d+\.\d+\.\d+\.\d+)/);
+            ipAddress = ipMatch ? ipMatch[1] : null;
+            console.log('Found IP:', ipAddress);
+        } catch (err) {
+            console.error('Error getting IP:', err);
+            ipAddress = null;
+        }
+
         if (isAPMode) {
             return res.json({
                 connected: true,
                 mode: 'AP',
-                ip: '192.168.4.1',
-                message: 'Running in Access Point mode'
+                ip: ipAddress || '192.168.4.1',
+                message: 'Running in Access Point mode (SpotStream)\nConnect to this network to configure WiFi'
             });
         }
 
         // Gebruik nmcli voor WiFi status
         const wifiStatus = await execPromise('nmcli -t -f DEVICE,STATE,CONNECTION dev | grep wlan0');
-        const ipAddress = await execPromise('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"').catch(() => '');
+        console.log('WiFi status:', wifiStatus);
 
         if (wifiStatus.includes('connected')) {
             // Haal SSID op via nmcli
@@ -175,7 +187,8 @@ app.get('/status', async (req, res) => {
         return res.json({
             connected: false,
             mode: 'client',
-            message: 'Not connected to any network'
+            message: 'Not connected to any network',
+            ip: ipAddress
         });
 
     } catch (error) {
