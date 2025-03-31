@@ -1,5 +1,30 @@
 #!/bin/bash
 
+# Voeg deze regels toe na de system update (aan het begin van het script)
+echo "Setting hostname..."
+sudo hostnamectl set-hostname spotStream
+sudo sed -i 's/127.0.1.1.*raspberrypi/127.0.1.1\tspotStream/g' /etc/hosts
+
+# Installeer avahi-daemon voor .local domein ondersteuning
+sudo apt install -y avahi-daemon
+sudo systemctl enable avahi-daemon
+
+# Update de services sectie
+echo "Starting services..."
+sudo systemctl daemon-reload
+sudo systemctl enable avahi-daemon
+sudo systemctl enable wifi-check.service
+sudo systemctl enable spotify-auth-server
+sudo systemctl enable http-server
+
+sudo systemctl restart avahi-daemon
+sudo systemctl restart networking
+sudo systemctl restart dhcpcd
+sudo systemctl restart wpa_supplicant
+sudo systemctl restart wifi-check
+sudo systemctl restart spotify-auth-server
+sudo systemctl restart http-server
+
 # Update en installeer vereisten
 echo "Updating system and installing dependencies..."
 sudo apt update && sudo apt upgrade -y
@@ -151,15 +176,6 @@ EOF'
 # Enable de nieuwe service
 sudo systemctl enable ap-mode.service
 
-# Update de Start services sectie:
-echo "Starting services..."
-sudo systemctl start ap-mode
-sudo systemctl start hostapd
-sudo systemctl start dnsmasq
-sudo systemctl start wifi-check.service
-sudo systemctl start spotify-auth-server
-sudo systemctl start http-server
-
 echo "Setup complete! The services are running."
 echo "Your Raspberry Pi should now appear as 'Raspberry Pi Speaker' in Spotify Connect"
 
@@ -192,9 +208,4 @@ esac
 EOF'
 
 sudo chmod +x /home/test/toggle-wifi-mode.sh
-
-# Voeg deze regel toe na de system update
-echo "Setting hostname..."
-sudo hostnamectl set-hostname spotStream
-sudo sed -i 's/127.0.1.1.*raspberrypi/127.0.1.1\tspotStream/g' /etc/hosts
 

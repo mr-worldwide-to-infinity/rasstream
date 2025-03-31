@@ -28,22 +28,14 @@ const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 let radioProcess = null;
 
 // Voeg deze helper functie toe bovenaan het bestand na de imports
-async function getCurrentIP() {
-    return new Promise((resolve) => {
-        exec('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"', (error, stdout) => {
-            if (error || !stdout.trim()) {
-                resolve('192.168.4.1'); // Fallback naar AP IP
-            } else {
-                resolve(stdout.trim());
-            }
-        });
-    });
+async function getServerUrl() {
+    return 'spotStream.local';
 }
 
 // 🔹 1. Route om gebruiker naar Spotify login te sturen
 app.get('/login', async (req, res) => {
-    const currentIP = await getCurrentIP();
-    const redirectUri = `http://${currentIP}:${PORT}/callback`;
+    const hostname = await getServerUrl();
+    const redirectUri = `http://${hostname}:${PORT}/callback`;
     
     const scope = 'streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state app-remote-control';
     const queryParams = querystring.stringify({
@@ -59,8 +51,8 @@ app.get('/login', async (req, res) => {
 // 🔹 2. Spotify callback route
 app.get('/callback', async (req, res) => {
     const code = req.query.code;
-    const currentIP = await getCurrentIP();
-    const redirectUri = `http://${currentIP}:${PORT}/callback`;
+    const hostname = await getServerUrl();
+    const redirectUri = `http://${hostname}:${PORT}/callback`;
 
     try {
         const response = await axios.post(SPOTIFY_TOKEN_URL, new URLSearchParams({
@@ -88,7 +80,7 @@ app.get('/callback', async (req, res) => {
         });
 
         // Gebruik hetzelfde IP voor de redirect
-        res.redirect(`http://${currentIP}:5500/test.html`);
+        res.redirect(`http://${hostname}:5500/test.html`);
     } catch (error) {
         console.error("Error getting token:", error.response?.data || error.message);
         res.status(500).send("Authentication failed");
@@ -138,8 +130,7 @@ app.get('/check-token', (req, res) => {
 });
 
 // 🔹 Endpoint om de verbindingsstatus te controleren
-app.get('/status', (req, res) => {
-    // Helper functie om commands uit te voeren
+app.get('/status', async (req, res) => {
     const execPromise = (command) => {
         return new Promise((resolve, reject) => {
             exec(command, (error, stdout, stderr) => {
@@ -149,73 +140,50 @@ app.get('/status', (req, res) => {
         });
     };
 
-    // Check alle netwerk informatie
-    async function checkNetworkStatus() {
-        try {
-            // Check AP mode
-            const hostapd = await execPromise('sudo systemctl is-active hostapd');
-            const isAPMode = hostapd === 'active';
+    try {
+        // Check eerst of hostapd actief is
+        const hostapdStatus = await execPromise('systemctl is-active hostapd');
+        const isAPMode = hostapdStatus === 'active';
 
-            if (isAPMode) {
-                const apIP = await execPromise('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"');
-                return res.json({ 
-                    connected: true,
-                    mode: 'AP',
-                    ip: apIP,
-                    message: 'Running in Access Point mode'
-                });
-            }
+        // Check WiFi verbinding
+        const hasWifiConnection = await execPromise('iwgetid wlan0 -r').catch(() => '');
+        const ipAddress = await execPromise('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"').catch(() => '');
 
-            // Check client mode
-            const iwconfig = await execPromise('iwconfig wlan0');
-            if (iwconfig.includes('ESSID:off/any')) {
-                return res.json({ 
-                    connected: false,
-                    mode: 'client',
-                    message: 'Not connected to any network'
-                });
-            }
+        if (isAPMode) {
+            return res.json({
+                connected: true,
+                mode: 'AP',
+                ip: '192.168.4.1',
+                message: 'Running in Access Point mode'
+            });
+        }
 
-            // Get network details
-            const ssid = await execPromise('iwgetid -r');
-            const ip = await execPromise('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"');
-            
+        if (hasWifiConnection && ipAddress) {
             // Check internet
-            let hasInternet = false;
-            try {
-                await execPromise('ping -c 1 -W 1 8.8.8.8');
-                hasInternet = true;
-            } catch (error) {
-                hasInternet = false;
-            }
-
+            const hasInternet = await execPromise('ping -c 1 -W 1 8.8.8.8').then(() => true).catch(() => false);
+            
             return res.json({
                 connected: true,
                 mode: 'client',
-                ssid: ssid,
-                ip: ip,
+                ssid: hasWifiConnection,
+                ip: ipAddress,
                 internet: hasInternet
             });
-
-        } catch (error) {
-            console.error('Error checking network status:', error);
-            return res.json({ 
-                connected: false,
-                mode: 'unknown',
-                error: 'Failed to check connection status',
-                details: error.message
-            });
         }
-    }
 
-    // Voer de check uit
-    checkNetworkStatus().catch(error => {
-        console.error('Status check failed:', error);
-        res.status(500).json({ 
-            error: 'Status check failed', 
-            details: error.message 
+        return res.json({
+            connected: false,
+            mode: 'client',
+            message: 'Not connected to any network'
         });
-    });
+
+    } catch (error) {
+        console.error('Error checking status:', error);
+        res.status(500).json({
+            error: 'Failed to check status',
+            details: error.message
+        });
+    }
 });
 
 // 🔹 Endpoint om beschikbare WiFi-netwerken te scannen

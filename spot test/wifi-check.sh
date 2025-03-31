@@ -9,12 +9,23 @@ check_internet() {
     return $?
 }
 
+# Functie om wifi status te controleren
+check_wifi_connection() {
+    # Check of we een IP hebben op wlan0
+    if ip addr show wlan0 | grep -q "inet "; then
+        # Check of we verbonden zijn met een SSID
+        if iwgetid wlan0 -r > /dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # Functie om AP mode te starten
 start_ap_mode() {
     echo "Starting AP mode..."
     
     # Stop alle netwerk services eerst
-    sudo systemctl stop dhcpcd
     sudo systemctl stop wpa_supplicant
     sudo systemctl stop hostapd
     sudo systemctl stop dnsmasq
@@ -31,21 +42,27 @@ start_ap_mode() {
     sudo ip addr add 192.168.4.1/24 dev wlan0
     
     # Start services in de juiste volgorde
-    sudo systemctl start dhcpcd
-    sudo systemctl start hostapd
-    sudo systemctl start dnsmasq
+    sudo systemctl start hostapd || echo "Failed to start hostapd"
+    sleep 2
+    sudo systemctl start dnsmasq || echo "Failed to start dnsmasq"
     
-    echo "Access point started. SSID: RaspberryPiAP, Password: raspberry"
+    echo "Access point started. SSID: SpotStream"
 }
 
-# Controleer of er een actieve WiFi-verbinding én internet is
-if ! check_internet; then
-    echo "No internet connection found. Starting access point..."
-    start_ap_mode
+# Hoofdlogica
+if check_wifi_connection; then
+    if check_internet; then
+        echo "Connected to WiFi with internet access: $(iwgetid -r)"
+        # Zorg dat AP mode uit staat
+        sudo systemctl stop hostapd
+        sudo systemctl stop dnsmasq
+        # Start wpa_supplicant als die niet al draait
+        sudo systemctl start wpa_supplicant
+    else
+        echo "Connected to WiFi but no internet. Starting AP mode..."
+        start_ap_mode
+    fi
 else
-    echo "Internet connection found: $(iwgetid -r)"
-    # Zorg dat we in client mode blijven
-    sudo systemctl stop hostapd
-    sudo systemctl stop dnsmasq
-    sudo systemctl start wpa_supplicant
+    echo "No WiFi connection. Starting AP mode..."
+    start_ap_mode
 fi
