@@ -27,14 +27,30 @@ const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 // Globale variabele om het radio proces bij te houden
 let radioProcess = null;
 
+// Voeg deze helper functie toe bovenaan het bestand na de imports
+async function getCurrentIP() {
+    return new Promise((resolve) => {
+        exec('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"', (error, stdout) => {
+            if (error || !stdout.trim()) {
+                resolve('192.168.4.1'); // Fallback naar AP IP
+            } else {
+                resolve(stdout.trim());
+            }
+        });
+    });
+}
+
 // 🔹 1. Route om gebruiker naar Spotify login te sturen
-app.get('/login', (req, res) => {
+app.get('/login', async (req, res) => {
+    const currentIP = await getCurrentIP();
+    const redirectUri = `http://${currentIP}:${PORT}/callback`;
+    
     const scope = 'streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state app-remote-control';
     const queryParams = querystring.stringify({
         response_type: 'code',
         client_id: process.env.SPOTIFY_CLIENT_ID,
         scope: scope,
-        redirect_uri: process.env.REDIRECT_URI,
+        redirect_uri: redirectUri,
     });
 
     res.redirect(`${SPOTIFY_AUTH_URL}?${queryParams}`);
@@ -43,12 +59,14 @@ app.get('/login', (req, res) => {
 // 🔹 2. Spotify callback route
 app.get('/callback', async (req, res) => {
     const code = req.query.code;
+    const currentIP = await getCurrentIP();
+    const redirectUri = `http://${currentIP}:${PORT}/callback`;
 
     try {
         const response = await axios.post(SPOTIFY_TOKEN_URL, new URLSearchParams({
             grant_type: 'authorization_code',
             code: code,
-            redirect_uri: process.env.REDIRECT_URI,
+            redirect_uri: redirectUri,
             client_id: process.env.SPOTIFY_CLIENT_ID,
             client_secret: process.env.SPOTIFY_CLIENT_SECRET,
         }), {
@@ -69,7 +87,8 @@ app.get('/callback', async (req, res) => {
             maxAge: 30 * 24 * 3600000 // 30 days
         });
 
-        res.redirect(`${process.env.FRONTEND_URL}/test.html`);
+        // Gebruik hetzelfde IP voor de redirect
+        res.redirect(`http://${currentIP}:5500/test.html`);
     } catch (error) {
         console.error("Error getting token:", error.response?.data || error.message);
         res.status(500).send("Authentication failed");
