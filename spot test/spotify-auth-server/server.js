@@ -134,8 +134,12 @@ app.get('/status', async (req, res) => {
     const execPromise = (command) => {
         return new Promise((resolve, reject) => {
             exec(`sudo ${command}`, (error, stdout, stderr) => {
-                if (error) reject(error);
-                else resolve(stdout.trim());
+                if (error) {
+                    console.log(`Command failed: ${command}`, error);
+                    resolve('inactive'); // Return inactive instead of rejecting
+                } else {
+                    resolve(stdout.trim());
+                }
             });
         });
     };
@@ -193,9 +197,12 @@ app.get('/status', async (req, res) => {
 
     } catch (error) {
         console.error('Error checking status:', error);
+        // Return a more informative error response
         res.status(500).json({
             error: 'Failed to check status',
-            details: error.message
+            details: error.message,
+            connected: false,
+            mode: 'unknown'
         });
     }
 });
