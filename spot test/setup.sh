@@ -1,36 +1,14 @@
 #!/bin/bash
 
-# Voeg deze regels toe na de system update (aan het begin van het script)
+# Update en installeer vereisten eerst
+echo "Updating system and installing dependencies..."
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y nodejs npm mpg123 alsa-utils avahi-daemon dnsmasq hostapd
+
+# Stel hostname in
 echo "Setting hostname..."
 sudo hostnamectl set-hostname spotStream
 sudo sed -i 's/127.0.1.1.*raspberrypi/127.0.1.1\tspotStream/g' /etc/hosts
-
-# Installeer avahi-daemon voor .local domein ondersteuning
-sudo apt install -y avahi-daemon
-sudo systemctl enable avahi-daemon
-
-# Update de services sectie
-echo "Starting services..."
-sudo systemctl daemon-reload
-sudo systemctl enable avahi-daemon
-sudo systemctl enable wifi-check.service
-sudo systemctl enable spotify-auth-server
-sudo systemctl enable http-server
-
-sudo systemctl restart avahi-daemon
-sudo systemctl restart networking
-sudo systemctl restart dhcpcd
-sudo systemctl restart wpa_supplicant
-sudo systemctl restart wifi-check
-sudo systemctl restart spotify-auth-server
-sudo systemctl restart http-server
-
-# Update en installeer vereisten
-echo "Updating system and installing dependencies..."
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y nodejs npm mpg123 alsa-utils
-echo "Installing access point software..."
-sudo apt install -y dnsmasq hostapd
 
 # Installeer http-server globaal
 echo "Installing http-server..."
@@ -102,7 +80,7 @@ echo "Creating WiFi check service..."
 sudo bash -c 'cat > /etc/systemd/system/wifi-check.service <<EOF
 [Unit]
 Description=WiFi Connection Check
-After=network.target
+After=network-online.target
 Before=spotify-auth-server.service http-server.service
 
 [Service]
@@ -119,7 +97,8 @@ echo "Creating Spotify Auth Server service..."
 sudo bash -c 'cat > /etc/systemd/system/spotify-auth-server.service <<EOF
 [Unit]
 Description=Spotify Auth Server
-After=network.target
+After=network-online.target wifi-check.service
+Wants=network-online.target
 
 [Service]
 ExecStart=/usr/bin/node /home/test/spotify-auth-server/server.js
@@ -138,7 +117,8 @@ echo "Creating HTTP Server service..."
 sudo bash -c 'cat > /etc/systemd/system/http-server.service <<EOF
 [Unit]
 Description=HTTP Server for Frontend
-After=network.target
+After=network-online.target wifi-check.service
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -156,34 +136,34 @@ EOF'
 echo "Setting up wifi-check script..."
 sudo chmod +x /home/test/wifi-check.sh
 
-# Voeg deze regels toe voor de "Start services" sectie:
-# Maak zeker dat de services in de juiste volgorde starten
-sudo bash -c 'cat > /etc/systemd/system/ap-mode.service <<EOF
-[Unit]
-Description=Access Point Mode Service
-After=network.target
-Before=hostapd.service dnsmasq.service
+# Enable services
+echo "Enabling services..."
+sudo systemctl daemon-reload
+sudo systemctl enable avahi-daemon
+sudo systemctl enable hostapd
+sudo systemctl enable dnsmasq
+sudo systemctl enable wifi-check.service
+sudo systemctl enable spotify-auth-server
+sudo systemctl enable http-server
 
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c "ip link set wlan0 down && ip addr flush dev wlan0 && ip link set wlan0 up && ip addr add 192.168.4.1/24 dev wlan0"
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF'
-
-# Enable de nieuwe service
-sudo systemctl enable ap-mode.service
+# Start services in de juiste volgorde
+echo "Starting services..."
+sudo systemctl restart avahi-daemon
+sudo systemctl restart dhcpcd
+sudo systemctl restart hostapd
+sudo systemctl restart dnsmasq
+sudo systemctl restart wifi-check
+sudo systemctl restart spotify-auth-server
+sudo systemctl restart http-server
 
 echo "Setup complete! The services are running."
-echo "Your Raspberry Pi should now appear as 'Raspberry Pi Speaker' in Spotify Connect"
+echo "Your Raspberry Pi should now appear as SpotStream"
 
+# Maak toggle-wifi-mode script
 sudo bash -c 'cat > /home/test/toggle-wifi-mode.sh <<EOF
 #!/bin/bash
 
 function start_ap_mode() {
-    # Configureer statisch IP voor AP mode
     sudo ip addr flush dev wlan0
     sudo ip addr add 192.168.4.1/24 dev wlan0
     sudo systemctl start hostapd
@@ -191,7 +171,6 @@ function start_ap_mode() {
 }
 
 function start_client_mode() {
-    # Verwijder statisch IP en laat DHCP het overnemen
     sudo ip addr flush dev wlan0
     sudo dhclient -r wlan0
     sudo dhclient wlan0
