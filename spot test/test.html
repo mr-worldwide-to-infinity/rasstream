@@ -40,28 +40,25 @@
             try {
                 const response = await fetch(`${serverUrl}/status`);
                 const status = await response.json();
-                if (status.connected) {
-                    document.getElementById('networkStatus').textContent = 
-                        `Connected to: ${status.ssid}`;
-                    document.getElementById('wifiConfig').style.display = 'none';
-                    document.getElementById('spotifyContainer').style.display = 'block';
-                    if (window.lastConnectionState === false) {
-                        reconnectAttempts = 0;
-                        location.reload();
-                    }
-                    window.lastConnectionState = true;
-                } else {
-                    document.getElementById('networkStatus').textContent = 
-                        'Not connected to any network';
+                const networkStatus = document.getElementById('networkStatus');
+                
+                if (status.mode === 'AP') {
+                    networkStatus.textContent = 'Running in Access Point mode';
                     document.getElementById('wifiConfig').style.display = 'block';
                     document.getElementById('spotifyContainer').style.display = 'none';
-                    window.lastConnectionState = false;
+                } else if (status.connected) {
+                    networkStatus.textContent = `Connected to: ${status.ssid}\nIP: ${status.ip}\nInternet: ${status.internet ? 'Yes' : 'No'}`;
+                    document.getElementById('wifiConfig').style.display = 'none';
+                    document.getElementById('spotifyContainer').style.display = 'block';
+                } else {
+                    networkStatus.textContent = status.message || 'Not connected to any network';
+                    document.getElementById('wifiConfig').style.display = 'block';
+                    document.getElementById('spotifyContainer').style.display = 'none';
                 }
             } catch (error) {
-                document.getElementById('networkStatus').textContent = 
-                    'Unable to check connection status';
+                console.error('Error checking connection:', error);
+                document.getElementById('networkStatus').textContent = 'Unable to check connection status';
                 document.getElementById('wifiConfig').style.display = 'block';
-                window.lastConnectionState = false;
             }
         }
 

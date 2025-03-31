@@ -111,33 +111,127 @@ app.get('/check-token', (req, res) => {
     });
 });
 
-// 🔹 Endpoint om beschikbare WiFi-netwerken te scannen
-app.get('/networks', (req, res) => {
-    exec('iwlist wlan0 scan', (error, stdout) => {
-        if (error) {
-            console.error('Error scanning networks:', error);
-            return res.status(500).json({ error: 'Error scanning networks' });
+// 🔹 Endpoint om de verbindingsstatus te controleren
+app.get('/status', (req, res) => {
+    // Check eerst of we in AP mode zijn
+    exec('systemctl is-active hostapd', (error, stdout) => {
+        const isAPMode = stdout.trim() === 'active';
+        
+        if (isAPMode) {
+            return res.json({ 
+                connected: false,
+                mode: 'AP',
+                message: 'Running in Access Point mode'
+            });
         }
 
-        const networks = [];
-        const regex = /ESSID:"(.*?)"/g;
-        let match;
-        while ((match = regex.exec(stdout)) !== null) {
-            networks.push({ ssid: match[1] });
-        }
+        // Als we niet in AP mode zijn, check de client verbinding
+        exec('iwconfig wlan0', (error, stdout) => {
+            if (error) {
+                console.error('Error checking wifi status:', error);
+                return res.json({ 
+                    connected: false,
+                    mode: 'unknown',
+                    error: 'Failed to check connection status'
+                });
+            }
 
-        res.json(networks);
+            // Check voor "ESSID:off/any" wat betekent dat we niet verbonden zijn
+            if (stdout.includes('ESSID:off/any')) {
+                return res.json({ 
+                    connected: false,
+                    mode: 'client',
+                    message: 'Not connected to any network'
+                });
+            }
+
+            // Haal SSID op
+            exec('iwgetid -r', (error, stdout) => {
+                if (error || !stdout.trim()) {
+                    return res.json({ 
+                        connected: false,
+                        mode: 'client',
+                        message: 'Could not determine connected network'
+                    });
+                }
+
+                // Check internet connectiviteit
+                exec('ping -c 1 -W 1 8.8.8.8', (error) => {
+                    const hasInternet = !error;
+                    
+                    // Haal IP adres op
+                    exec('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"', (error, ipStdout) => {
+                        res.json({
+                            connected: true,
+                            mode: 'client',
+                            ssid: stdout.trim(),
+                            ip: ipStdout ? ipStdout.trim() : null,
+                            internet: hasInternet
+                        });
+                    });
+                });
+            });
+        });
     });
 });
 
-// 🔹 Endpoint om de verbindingsstatus te controleren
-app.get('/status', (req, res) => {
-    exec('iwgetid -r', (error, stdout) => {
-        if (error || !stdout.trim()) {
-            return res.json({ connected: false });
+// 🔹 Endpoint om beschikbare WiFi-netwerken te scannen
+app.get('/networks', (req, res) => {
+    // Check eerst of we in AP mode zijn
+    exec('systemctl is-active hostapd', (error, apStdout) => {
+        const isAPMode = apStdout.trim() === 'active';
+        
+        if (!isAPMode) {
+            return res.status(400).json({ 
+                error: 'Must be in AP mode to scan networks',
+                message: 'Currently connected to a network. Disconnect first to scan.'
+            });
         }
 
-        res.json({ connected: true, ssid: stdout.trim() });
+        exec('iwlist wlan0 scan', (error, stdout) => {
+            if (error) {
+                console.error('Error scanning networks:', error);
+                return res.status(500).json({ error: 'Error scanning networks' });
+            }
+
+            const networks = [];
+            const lines = stdout.split('\n');
+            let currentNetwork = {};
+
+            lines.forEach(line => {
+                line = line.trim();
+                
+                if (line.startsWith('Cell')) {
+                    if (currentNetwork.ssid) {
+                        networks.push(currentNetwork);
+                    }
+                    currentNetwork = {};
+                }
+                
+                if (line.startsWith('ESSID:')) {
+                    const ssid = line.match(/ESSID:"(.*)"/)?.[1];
+                    if (ssid) {
+                        currentNetwork.ssid = ssid;
+                    }
+                }
+                
+                if (line.includes('Signal level=')) {
+                    const signal = line.match(/Signal level=(-\d+)/)?.[1];
+                    if (signal) {
+                        currentNetwork.signal = parseInt(signal);
+                    }
+                }
+            });
+
+            if (currentNetwork.ssid) {
+                networks.push(currentNetwork);
+            }
+
+            // Sorteer op signaalsterkte
+            networks.sort((a, b) => (b.signal || -100) - (a.signal || -100));
+
+            res.json(networks);
+        });
     });
 });
 
