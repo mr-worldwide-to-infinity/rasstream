@@ -130,6 +130,7 @@ sudo systemctl enable http-server
 
 # Start services
 echo "Starting services..."
+sudo ip addr add 192.168.4.1/24 dev wlan0
 sudo systemctl restart dhcpcd
 sudo systemctl start hostapd
 sudo systemctl start dnsmasq
