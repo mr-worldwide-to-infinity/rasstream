@@ -133,7 +133,7 @@ app.get('/check-token', (req, res) => {
 app.get('/status', async (req, res) => {
     const execPromise = (command) => {
         return new Promise((resolve, reject) => {
-            exec(command, (error, stdout, stderr) => {
+            exec(`sudo ${command}`, (error, stdout, stderr) => {
                 if (error) reject(error);
                 else resolve(stdout.trim());
             });
@@ -145,10 +145,6 @@ app.get('/status', async (req, res) => {
         const hostapdStatus = await execPromise('systemctl is-active hostapd');
         const isAPMode = hostapdStatus === 'active';
 
-        // Check WiFi verbinding
-        const hasWifiConnection = await execPromise('iwgetid wlan0 -r').catch(() => '');
-        const ipAddress = await execPromise('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"').catch(() => '');
-
         if (isAPMode) {
             return res.json({
                 connected: true,
@@ -158,14 +154,19 @@ app.get('/status', async (req, res) => {
             });
         }
 
-        if (hasWifiConnection && ipAddress) {
-            // Check internet
-            const hasInternet = await execPromise('ping -c 1 8.8.8.8').then(() => true).catch(() => false);
+        // Gebruik nmcli voor WiFi status
+        const wifiStatus = await execPromise('nmcli -t -f DEVICE,STATE,CONNECTION dev | grep wlan0');
+        const ipAddress = await execPromise('ip -f inet addr show wlan0 | grep -Po "(?<=inet )([0-9.]+)"').catch(() => '');
+
+        if (wifiStatus.includes('connected')) {
+            // Haal SSID op via nmcli
+            const ssid = await execPromise('nmcli -t -f NAME connection show --active | head -n1');
+            const hasInternet = await execPromise('ping -c 1 -W 2 8.8.8.8').then(() => true).catch(() => false);
             
             return res.json({
                 connected: true,
                 mode: 'client',
-                ssid: hasWifiConnection,
+                ssid: ssid,
                 ip: ipAddress,
                 internet: hasInternet
             });
@@ -174,7 +175,7 @@ app.get('/status', async (req, res) => {
         return res.json({
             connected: false,
             mode: 'client',
-            message: 'Not connected to any network22'
+            message: 'Not connected to any network'
         });
 
     } catch (error) {
@@ -187,10 +188,11 @@ app.get('/status', async (req, res) => {
 });
 
 // 🔹 Endpoint om beschikbare WiFi-netwerken te scannen
-app.get('/networks', (req, res) => {
-    // Check eerst of we in AP mode zijn
-    exec('systemctl is-active hostapd', (error, apStdout) => {
-        const isAPMode = apStdout.trim() === 'active';
+app.get('/networks', async (req, res) => {
+    try {
+        // Check eerst of we in AP mode zijn
+        const hostapdStatus = await exec('sudo systemctl is-active hostapd');
+        const isAPMode = hostapdStatus.trim() === 'active';
         
         if (!isAPMode) {
             return res.status(400).json({ 
@@ -199,51 +201,35 @@ app.get('/networks', (req, res) => {
             });
         }
 
-        exec('iwlist wlan0 scan', (error, stdout) => {
+        // Scan voor netwerken met nmcli
+        exec('sudo nmcli -f SSID,SIGNAL dev wifi list', (error, stdout) => {
             if (error) {
                 console.error('Error scanning networks:', error);
                 return res.status(500).json({ error: 'Error scanning networks' });
             }
 
-            const networks = [];
-            const lines = stdout.split('\n');
-            let currentNetwork = {};
-
-            lines.forEach(line => {
-                line = line.trim();
-                
-                if (line.startsWith('Cell')) {
-                    if (currentNetwork.ssid) {
-                        networks.push(currentNetwork);
-                    }
-                    currentNetwork = {};
-                }
-                
-                if (line.startsWith('ESSID:')) {
-                    const ssid = line.match(/ESSID:"(.*)"/)?.[1];
-                    if (ssid) {
-                        currentNetwork.ssid = ssid;
-                    }
-                }
-                
-                if (line.includes('Signal level=')) {
-                    const signal = line.match(/Signal level=(-\d+)/)?.[1];
-                    if (signal) {
-                        currentNetwork.signal = parseInt(signal);
-                    }
-                }
-            });
-
-            if (currentNetwork.ssid) {
-                networks.push(currentNetwork);
-            }
+            const networks = stdout
+                .split('\n')
+                .slice(1) // Skip header row
+                .filter(line => line.trim()) // Remove empty lines
+                .map(line => {
+                    const [ssid, signal] = line.trim().split(/\s+/);
+                    return {
+                        ssid: ssid,
+                        signal: parseInt(signal) || 0
+                    };
+                })
+                .filter(network => network.ssid !== '--'); // Filter out networks without SSID
 
             // Sorteer op signaalsterkte
-            networks.sort((a, b) => (b.signal || -100) - (a.signal || -100));
+            networks.sort((a, b) => b.signal - a.signal);
 
             res.json(networks);
         });
-    });
+    } catch (error) {
+        console.error('Error in networks endpoint:', error);
+        res.status(500).json({ error: 'Failed to scan networks' });
+    }
 });
 
 // 🔹 Endpoint om verbinding te maken met een WiFi-netwerk

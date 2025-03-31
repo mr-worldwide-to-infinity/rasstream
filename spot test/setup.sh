@@ -3,7 +3,7 @@
 # Update en installeer vereisten eerst
 echo "Updating system and installing dependencies..."
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y nodejs npm mpg123 alsa-utils avahi-daemon dnsmasq hostapd
+sudo apt install -y nodejs npm mpg123 alsa-utils avahi-daemon dnsmasq hostapd network-manager
 
 # Stel hostname in
 echo "Setting hostname..."
@@ -187,4 +187,17 @@ esac
 EOF'
 
 sudo chmod +x /home/test/toggle-wifi-mode.sh
+
+# Enable and start NetworkManager
+sudo systemctl enable NetworkManager
+sudo systemctl start NetworkManager
+
+# Configure NetworkManager to manage wlan0
+sudo bash -c 'cat > /etc/NetworkManager/conf.d/10-globally-managed-devices.conf' << EOF
+[keyfile]
+unmanaged-devices=none
+EOF
+
+# Restart NetworkManager to apply changes
+sudo systemctl restart NetworkManager
 
