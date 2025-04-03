@@ -162,18 +162,51 @@
 
         async function scanNetworks() {
             try {
-                const response = await fetch(`${serverUrl}/networks`);
-                const networks = await response.json();
+                // Toon loading status
+                const networkStatus = document.getElementById('networkStatus');
                 const networkList = document.getElementById('networkList');
+                networkStatus.textContent = 'Scanning for networks...';
                 networkList.innerHTML = '';
-                networks.forEach(network => {
+
+                const response = await fetch(`${serverUrl}/networks`);
+                const data = await response.json();
+
+                // Check voor server error
+                if (!response.ok) {
+                    networkStatus.textContent = `Server error: ${data.error || 'Unknown error'}`;
+                    console.error('Server error:', data);
+                    return;
+                }
+
+                // Controleer of we een array hebben
+                if (!Array.isArray(data)) {
+                    networkStatus.textContent = 'Invalid response from server';
+                    console.error('Invalid response:', data);
+                    return;
+                }
+
+                // Toon feedback als er geen netwerken zijn
+                if (data.length === 0) {
+                    networkStatus.textContent = 'No networks found';
+                    return;
+                }
+
+                // Reset status en toon netwerken
+                networkStatus.textContent = `Found ${data.length} networks`;
+                data.forEach(network => {
                     const li = document.createElement('li');
                     li.textContent = network.ssid;
+                    li.style.cursor = 'pointer';
+                    li.style.padding = '5px';
+                    li.style.margin = '2px 0';
+                    li.style.backgroundColor = '#f0f0f0';
                     li.onclick = () => selectNetwork(network.ssid);
                     networkList.appendChild(li);
                 });
             } catch (error) {
-                console.error('Fout bij scannen van netwerken:', error);
+                console.error('Error scanning networks:', error);
+                document.getElementById('networkStatus').textContent = 
+                    'Failed to scan networks. Please try again.';
             }
         }
 
