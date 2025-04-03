@@ -39,7 +39,6 @@ slaac private
 
 # AP mode configuratie
 interface wlan0
-    static ip_address=192.168.4.1/24
     nohook wpa_supplicant
 EOF'
 
@@ -122,7 +121,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/http-server /home/test -p 5500 --cors -a 0.0.0.0
+ExecStart=/usr/local/bin/http-server /home/test -p 3001 --cors -a 0.0.0.0
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=/home/test
 Restart=on-failure

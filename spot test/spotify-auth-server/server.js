@@ -223,7 +223,7 @@ app.get('/networks', async (req, res) => {
             // Wacht even tot de scan klaar is
             setTimeout(() => {
                 // Haal de scan resultaten op
-                exec('sudo iwlist wlan0 scan | grep -i "essid:\|quality="', (error, stdout) => {
+                exec('sudo iwlist wlan0 scan | grep -i "essid:\\|quality="', (error, stdout) => {
                     if (error) {
                         console.error('Error getting scan results:', error);
                         return res.status(500).json({ error: 'Failed to get scan results' });

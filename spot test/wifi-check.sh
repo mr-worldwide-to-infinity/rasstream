@@ -62,8 +62,18 @@ stop_ap_mode() {
     log "Stopping AP mode..."
     sudo systemctl stop hostapd
     sudo systemctl stop dnsmasq
+    
+    # Reset de interface volledig
+    sudo ip link set wlan0 down
     sudo ip addr flush dev wlan0
+    sudo ip link set wlan0 up
+    
+    # Start wpa_supplicant opnieuw
     sudo systemctl restart wpa_supplicant
+    
+    # Wacht even voor DHCP
+    sleep 10
+    
     log "AP mode stopped"
 }
 
