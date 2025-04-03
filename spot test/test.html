@@ -39,7 +39,7 @@
             
             // Probeer eerst spotStream.local
             const hostname = 'spotStream.local';
-            serverUrl = `http://${hostname}`;
+            serverUrl = `http://${hostname}:3001`;
             
             try {
                 console.log('Trying hostname:', serverUrl);
@@ -57,10 +57,10 @@
             // Fallback naar IP-gebaseerde URL
             const currentHostname = window.location.hostname;
             if (currentHostname === '192.168.4.1' || currentHostname.includes('192.168.4')) {
-                serverUrl = 'http://192.168.4.1';
+                serverUrl = 'http://192.168.4.1:3001';
                 console.log('Using AP IP:', serverUrl);
             } else {
-                serverUrl = `${window.location.protocol}//${currentHostname}`;
+                serverUrl = `${window.location.protocol}//${currentHostname}:3001`;
                 console.log('Using current hostname:', serverUrl);
             }
         }

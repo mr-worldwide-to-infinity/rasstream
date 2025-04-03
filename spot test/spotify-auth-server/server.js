@@ -55,7 +55,7 @@ app.get('/login', async (req, res) => {
 app.get('/callback', async (req, res) => {
     const code = req.query.code;
     const hostname = await getServerUrl();
-    const redirectUri = `http://${hostname}:${PORT}/callback`;
+    const redirectUri = `http://${hostname}/callback`;
 
     try {
         const response = await axios.post(SPOTIFY_TOKEN_URL, new URLSearchParams({
@@ -83,7 +83,7 @@ app.get('/callback', async (req, res) => {
         });
 
         // Gebruik hetzelfde IP voor de redirect
-        res.redirect(`http://${hostname}:5500/test.html`);
+        res.redirect(`http://${hostname}/test.html`);
     } catch (error) {
         console.error("Error getting token:", error.response?.data || error.message);
         res.status(500).send("Authentication failed");
