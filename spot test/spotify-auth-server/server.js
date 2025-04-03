@@ -213,41 +213,56 @@ app.get('/status', async (req, res) => {
 // 🔹 Endpoint om beschikbare WiFi-netwerken te scannen
 app.get('/networks', async (req, res) => {
     try {
-        // Check eerst of we in AP mode zijn
-        const hostapdStatus = await exec('sudo systemctl is-active hostapd');
-        const isAPMode = hostapdStatus.trim() === 'active';
-        
-        if (!isAPMode) {
-            return res.status(400).json({ 
-                error: 'Must be in AP mode to scan networks',
-                message: 'Currently connected to a network. Disconnect first to scan.'
-            });
-        }
-
-        // Scan voor netwerken met nmcli
-        exec('sudo nmcli -f SSID,SIGNAL dev wifi list', (error, stdout) => {
-            if (error) {
-                console.error('Error scanning networks:', error);
-                return res.status(500).json({ error: 'Error scanning networks' });
+        // Voer eerst een scan uit
+        exec('sudo iwlist wlan0 scan', (scanError) => {
+            if (scanError) {
+                console.error('Error initiating scan:', scanError);
+                return res.status(500).json({ error: 'Failed to initiate network scan' });
             }
 
-            const networks = stdout
-                .split('\n')
-                .slice(1) // Skip header row
-                .filter(line => line.trim()) // Remove empty lines
-                .map(line => {
-                    const [ssid, signal] = line.trim().split(/\s+/);
-                    return {
-                        ssid: ssid,
-                        signal: parseInt(signal) || 0
-                    };
-                })
-                .filter(network => network.ssid !== '--'); // Filter out networks without SSID
+            // Wacht even tot de scan klaar is
+            setTimeout(() => {
+                // Haal de scan resultaten op
+                exec('sudo iwlist wlan0 scan | grep -i "essid:\|quality="', (error, stdout) => {
+                    if (error) {
+                        console.error('Error getting scan results:', error);
+                        return res.status(500).json({ error: 'Failed to get scan results' });
+                    }
 
-            // Sorteer op signaalsterkte
-            networks.sort((a, b) => b.signal - a.signal);
+                    try {
+                        const lines = stdout.split('\n');
+                        const networks = [];
+                        let currentNetwork = {};
 
-            res.json(networks);
+                        lines.forEach(line => {
+                            if (line.includes('Quality=')) {
+                                const quality = line.match(/Quality=(\d+)\/70/);
+                                if (quality) {
+                                    currentNetwork.signal = parseInt(quality[1]);
+                                }
+                            } else if (line.includes('ESSID:')) {
+                                const ssid = line.match(/ESSID:"(.*)"/)?.[1];
+                                if (ssid) {
+                                    currentNetwork.ssid = ssid;
+                                    networks.push({...currentNetwork});
+                                    currentNetwork = {};
+                                }
+                            }
+                        });
+
+                        // Filter duplicates and sort by signal strength
+                        const uniqueNetworks = Array.from(
+                            new Map(networks.map(network => [network.ssid, network])).values()
+                        ).sort((a, b) => (b.signal || 0) - (a.signal || 0));
+
+                        console.log('Found networks:', uniqueNetworks);
+                        res.json(uniqueNetworks);
+                    } catch (parseError) {
+                        console.error('Error parsing scan results:', parseError);
+                        res.status(500).json({ error: 'Failed to parse scan results' });
+                    }
+                });
+            }, 2000); // Wacht 2 seconden voor de scan resultaten
         });
     } catch (error) {
         console.error('Error in networks endpoint:', error);
